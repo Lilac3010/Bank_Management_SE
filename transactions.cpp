@@ -66,14 +66,16 @@ bool parseAccountNumber(const std::string& text, int& accountNo) {
 }
 
 // Local time as "YYYY-MM-DD HH:MM:SS".
+
 std::string currentDateTime() {
     std::time_t now = std::time(nullptr);
     std::tm local{};
-#ifdef _WIN32
-    localtime_s(&local, &now);
-#else
-    localtime_r(&now, &local);
-#endif
+
+    std::tm* timeInfo = std::localtime(&now);
+    if (timeInfo != nullptr) {
+        local = *timeInfo;
+    }
+
     char buffer[20];
     std::strftime(buffer, sizeof buffer, "%Y-%m-%d %H:%M:%S", &local);
     return buffer;
@@ -198,6 +200,144 @@ bool depositMoney() {
     }
 
     DepositResult result = deposit(accountNo, amountPaise);
+    std::cout << result.message << "\n";
+    return result.success;
+}
+
+WithdrawalResult withdraw(int accountNo, long long amountPaise) {
+    WithdrawalResult result;
+
+    if (amountPaise <= 0) {
+        result.message = "Error: Withdrawal amount must be positive.";
+        return result;
+    }
+
+    std::vector<Account> accounts;
+    if (!loadAccounts(accounts)) {
+        result.message =
+            "Storage error: could not read account data. Withdrawal not made.";
+        return result;
+    }
+
+    // Find the requested account.
+    const Account* found = nullptr;
+    for (const Account& account : accounts) {
+        if (account.accountNumber == accountNo) {
+            found = &account;
+            break;
+        }
+    }
+
+    if (found == nullptr) {
+        result.message = "Error: Account not found.";
+        return result;
+    }
+
+    if (found->status == STATUS_CLOSED) {
+        result.message = "Error: Account is closed.";
+        return result;
+    }
+
+    if (found->status != STATUS_ACTIVE) {
+        result.message = "Error: Account is not active.";
+        return result;
+    }
+
+    // Reject withdrawals greater than the available balance.
+    if (amountPaise > found->balance) {
+        result.message =
+            "Error: Insufficient balance. Withdrawal not made.";
+        return result;
+    }
+
+    // Load existing transactions to generate a unique transaction ID.
+    std::vector<Transaction> transactions;
+    if (!loadTransactions(transactions)) {
+        result.message =
+            "Storage error: could not read transaction data. Withdrawal not made.";
+        return result;
+    }
+
+    int transactionId = nextTransactionId(transactions);
+    if (transactionId == 0) {
+        result.message =
+            "Error: Could not generate a transaction ID. Withdrawal not made.";
+        return result;
+    }
+
+    const Account original = *found;
+    Account updated = original;
+    updated.balance -= amountPaise;
+
+    Transaction txn;
+    txn.transactionId = transactionId;
+    txn.accountNumber = accountNo;
+    txn.type = TXN_WITHDRAWAL;
+    txn.amount = amountPaise;
+    txn.dateTime = currentDateTime();
+
+    // Save the balance update first.
+    if (!saveAccount(updated)) {
+        result.message = "Storage error: withdrawal not made.";
+        return result;
+    }
+
+    // If recording the transaction fails, attempt to restore the balance.
+    if (!saveTransaction(txn)) {
+        if (saveAccount(original)) {
+            result.message =
+                "Storage error: transaction could not be recorded. "
+                "Withdrawal cancelled; balance restored.";
+        } else {
+            result.message =
+                "Storage error: transaction could not be recorded and "
+                "the balance could not be restored. "
+                "Account data may be inconsistent.";
+        }
+        return result;
+    }
+
+    result.success = true;
+    result.newBalance = updated.balance;
+    result.transactionId = transactionId;
+    result.message =
+        "Withdrawal successful. Amount: Rs. " +
+        formatRupees(amountPaise) +
+        ". Remaining balance: Rs. " +
+        formatRupees(updated.balance);
+
+    return result;
+}
+
+bool withdrawMoney() {
+    std::string accountText, pin, amountText;
+
+    std::cout << "\n--- Withdraw Money ---\n";
+    std::cout << "Account number: ";
+    std::getline(std::cin, accountText);
+
+    std::cout << "PIN: ";
+    std::getline(std::cin, pin);
+
+    int accountNo = 0;
+    if (!parseAccountNumber(accountText, accountNo) ||
+        !authenticateCustomer(accountNo, trim(pin))) {
+        std::cout << "Access denied: invalid account number or PIN.\n";
+        return false;
+    }
+
+    std::cout << "Withdrawal amount (Rs.): ";
+    std::getline(std::cin, amountText);
+
+    long long amountPaise = 0;
+    if (!parseRupees(amountText, amountPaise)) {
+        std::cout
+            << "Error: Withdrawal amount must be an amount like "
+            << "1000 or 1000.50.\n";
+        return false;
+    }
+
+    WithdrawalResult result = withdraw(accountNo, amountPaise);
     std::cout << result.message << "\n";
     return result.success;
 }
