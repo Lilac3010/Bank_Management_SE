@@ -1,0 +1,5 @@
+*.o
+bank_test.exe
+accounts.txt
+transactions.txt
+accounts.tmp
