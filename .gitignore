@@ -1,0 +1,5 @@
+# Generated MSVC build files
+*.exe
+*.obj
+*.pdb
+*.ilk
