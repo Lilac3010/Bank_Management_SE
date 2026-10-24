@@ -3,6 +3,7 @@
 
 #include "account.h"
 #include "auth.h"
+#include "transactions.h"
 
 namespace {
 
@@ -25,6 +26,7 @@ int main() {
     while (true) {
         std::cout << "\n=== Bank Management System ===\n"
                   << "1. Employee Login\n"
+                  << "2. Deposit Money\n"
                   << "0. Exit\n"
                   << "Enter choice: ";
         std::string choice;
@@ -32,6 +34,8 @@ int main() {
         if (choice == "1") {
             if (loginEmployee()) employeeMenu();
             else std::cout << "Returning to main menu.\n";
+        } else if (choice == "2") {
+            depositMoney();
         } else {
             std::cout << "Invalid choice. Please try again.\n";
         }
