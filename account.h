@@ -11,7 +11,8 @@ struct CreateAccountResult {
     std::string message;
 };
 
-// FR-2 - returns an account number not used by any account in `existing`.
+// FR-2 - returns an account number not used by any account in `existing`,
+// or 0 if no such number can be generated. Implemented in account_number.cpp.
 int generateAccountNumber(const std::vector<Account>& existing);
 
 // FR-1 - validates and creates an account. Requires an authenticated employee.

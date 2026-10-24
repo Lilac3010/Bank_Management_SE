@@ -6,7 +6,7 @@ Console C++ application (C++17). See the SRS, Test Plan and SAD PDFs for require
 | Module | State |
 |---|---|
 | FR-1 create account (`account.cpp`) | Implemented |
-| FR-2 `generateAccountNumber` | Interface only (`account.h`) |
+| FR-2 `generateAccountNumber` (`account_number.cpp`) | Implemented |
 | FR-13 storage (`storage.h`) | Interface only |
 | FR-10 auth (`auth.h`) | Interface only; `isEmployeeAuthenticated()` pending FR-10 owner |
 
@@ -20,25 +20,40 @@ With MSVC (run in "Developer PowerShell for VS"):
     .\tests.exe
 
 ### Test doubles
-`tests.cpp` contains test-only fakes for `isEmployeeAuthenticated`, `generateAccountNumber`,
-`loadAccounts` and `saveAccount`. The tests are FR-1 unit tests: they do **not** verify
-FR-2, FR-10, FR-13 or persistence across restart.
+The two test suites use different test doubles:
 
-- Build the tests from `tests.cpp` and `account.cpp` only.
+- **`tests.cpp` (FR-1)** has its own fake account-number generator, plus fakes for
+  `isEmployeeAuthenticated`, `loadAccounts` and `saveAccount`. Because of that fake
+  `generateAccountNumber`, it must **never** be linked with `account_number.cpp`.
+  These tests do **not** verify FR-2, FR-10, FR-13 or persistence across restart.
+- **`tests_fr2.cpp` (FR-2)** uses the **real** generator from `account_number.cpp`, and has its
+  own fakes for login (`isEmployeeAuthenticated`) and storage (`loadAccounts`, `saveAccount`).
+  These tests do **not** verify FR-10, FR-13 or persistence across restart.
+- Build the two suites **separately**, each from its documented source-file list:
+  - FR-1: `tests.cpp account.cpp`
+  - FR-2: `tests_fr2.cpp account.cpp account_number.cpp`
+
+  Linking the two test files together fails, because both define `main()` and the same fakes.
 - Never build every `.cpp` file together (for example an IDE "build all" or a `*.cpp` glob):
-  `tests.cpp` and `main.cpp` both define `main()`, and the fakes clash with the real
-  `auth.cpp` / `storage.cpp` (duplicate-symbol link errors).
-- When FR-2 is implemented in `account.cpp`, delete the fake `generateAccountNumber` from
-  `tests.cpp` in the same change, and rewrite the tests that use `fake::generateCalls` /
-  `fake::forceNumber`.
+  the test files and `main.cpp` each define `main()`, and the fakes clash with the real
+  `account_number.cpp` / `auth.cpp` / `storage.cpp` (duplicate-symbol link errors).
 
-## Build the application (after auth.cpp, storage.cpp and generateAccountNumber exist)
-    g++ -std=c++17 -Wall -Wextra -o bank.exe main.cpp account.cpp auth.cpp storage.cpp
+## Build and run FR-2 tests (real generator; login and storage are test doubles)
+    g++ -std=c++17 -Wall -Wextra -o tests_fr2.exe tests_fr2.cpp account.cpp account_number.cpp
+    ./tests_fr2.exe
+
+With MSVC:
+
+    cl /std:c++17 /EHsc /W4 tests_fr2.cpp account.cpp account_number.cpp /Fe:tests_fr2.exe
+    .\tests_fr2.exe
+
+## Build the application (after auth.cpp and storage.cpp exist)
+    g++ -std=c++17 -Wall -Wextra -o bank.exe main.cpp account.cpp account_number.cpp auth.cpp storage.cpp
     ./bank.exe
 
 With MSVC:
 
-    cl /std:c++17 /EHsc /W4 main.cpp account.cpp auth.cpp storage.cpp /Fe:bank.exe
+    cl /std:c++17 /EHsc /W4 main.cpp account.cpp account_number.cpp auth.cpp storage.cpp /Fe:bank.exe
 
 ## Shared decisions (FR-1 / FR-2 / FR-13)
 - Money is stored as whole **paise** in `long long` (`Account::balance`, `Transaction::amount`):
@@ -46,6 +61,12 @@ With MSVC:
 - `bool loadAccounts(std::vector<Account>& accounts)` returns `false` when an existing data
   file cannot be read or parsed, and `true` with an empty list when no data file exists yet.
   FR-1 refuses to create an account when loading fails.
+- Account numbers (FR-2): the first account is **100001**; each new number is the highest
+  number among **all** stored accounts (ACTIVE and CLOSED) + 1. Gaps are never filled, so
+  no stored number is reissued. If `INT_MAX` is already used, the generator returns 0 and
+  FR-1 creates nothing.
+- Closing an account (FR-9) must mark it `CLOSED` and keep the record. Physically deleting
+  the highest-numbered account would let its number be issued again.
 
 ## FR-1 assumptions (not specified in the SRS)
 - 4-digit numeric PIN entered by the employee at account creation.
