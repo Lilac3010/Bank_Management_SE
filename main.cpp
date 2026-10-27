@@ -5,6 +5,8 @@
 #include "account.h"
 #include "auth.h"
 #include "transactions.h"
+#include "balance_enquiry.h"
+#include "mini_statement.h"
 
 namespace {
 
@@ -16,7 +18,9 @@ void employeeMenu() {
                   << "Enter choice: ";
 
         std::string choice;
-        if (!std::getline(std::cin, choice) || choice == "0") return;
+        if (!std::getline(std::cin, choice) || choice == "0") {
+            return;
+        }
 
         if (choice == "1") {
             createAccount();
@@ -34,11 +38,15 @@ int main() {
                   << "1. Employee Login\n"
                   << "2. Deposit Money\n"
                   << "3. Withdraw Money\n"
+                  << "4. Balance Enquiry\n"
+                  << "5. Mini-Statement\n"
                   << "0. Exit\n"
                   << "Enter choice: ";
 
         std::string choice;
-        if (!std::getline(std::cin, choice) || choice == "0") break;
+        if (!std::getline(std::cin, choice) || choice == "0") {
+            break;
+        }
 
         if (choice == "1") {
             if (loginEmployee()) {
@@ -50,6 +58,10 @@ int main() {
             depositMoney();
         } else if (choice == "3") {
             withdrawMoney();
+        } else if (choice == "4") {
+            balanceEnquiry();
+        } else if (choice == "5") {
+            miniStatement();
         } else {
             std::cout << "Invalid choice. Please try again.\n";
         }
