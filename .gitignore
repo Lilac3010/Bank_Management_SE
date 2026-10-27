@@ -3,3 +3,6 @@
 *.obj
 *.pdb
 *.ilk
+
+# Runtime banking data written by the application (FR-13); never commit it
+data/
