@@ -11,6 +11,7 @@ Console C++ application (C++17). See the SRS, Test Plan and SAD PDFs for require
 | FR-4 withdrawal (`transactions.cpp`) | Implemented |
 | FR-5 balance enquiry (`balance_enquiry.cpp`) | Implemented |
 | FR-6 mini-statement (`mini_statement.cpp`) | Implemented |
+| FR-7 employee account search (`account_search.cpp`) | Implemented; Employee Menu option 2 |
 | FR-13 storage (`storage.cpp`) | Implemented (see Data storage) |
 | FR-10 / FR-11 auth (`auth.h`) | Interface only: no `auth.cpp` yet, so `bank.exe` cannot link |
 
@@ -36,6 +37,9 @@ Each test suite uses its own test doubles:
 - **`tests_fr3.cpp` (FR-3)** is **parked**: it is kept in the repository but is not built or
   run as part of any flow (see Verification status). It has its own fakes for customer login
   and storage.
+- **`tests_fr7.cpp` (FR-7)** uses the real `account_search.cpp`, with fakes for employee login
+  (`isEmployeeAuthenticated`) and storage (`loadAccounts`). These tests do **not** verify FR-10,
+  FR-13 or persistence across restart.
 - **`tests_fr13.cpp` (FR-13)** uses the **real** `storage.cpp` together with the real FR-1 to FR-6
   code. Only employee and customer login (`isEmployeeAuthenticated`, `authenticateCustomer`) are
   fakes. It works only inside a temporary folder it creates and deletes (see Data storage).
@@ -45,6 +49,7 @@ Each test suite uses its own test doubles:
   - FR-4: `tests_fr4.cpp transactions.cpp`
   - FR-5: `tests_fr5.cpp balance_enquiry.cpp`
   - FR-6: `tests_fr6.cpp mini_statement.cpp`
+  - FR-7: `tests_fr7.cpp account_search.cpp`
   - FR-13: `tests_fr13.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp`
 
   Linking test files together fails, because each defines `main()` and the same fakes.
@@ -61,6 +66,12 @@ With MSVC:
     cl /std:c++17 /EHsc /W4 tests_fr2.cpp account.cpp account_number.cpp /Fe:tests_fr2.exe
     .\tests_fr2.exe
 
+## Build and run FR-7 tests (employee login and storage are test doubles)
+    cl /std:c++17 /EHsc /W4 tests_fr7.cpp account_search.cpp /Fe:tests_fr7.exe
+    .\tests_fr7.exe
+
+g++ equivalent: `g++ -std=c++17 -Wall -Wextra -o tests_fr7.exe tests_fr7.cpp account_search.cpp`.
+
 ## Build and run FR-13 storage tests (real storage; login is a test double)
     cl /std:c++17 /EHsc /W4 tests_fr13.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp /Fe:tests_fr13.exe
     .\tests_fr13.exe
@@ -70,7 +81,7 @@ The program prints the temporary folder it uses, and restarts itself twice as se
 processes to check that saved data survives a restart.
 
 ## Verification status
-Latest run with MSVC (`/std:c++17 /EHsc /W4`), during FR-13 work:
+Latest run with MSVC 2022 (`/std:c++17 /EHsc /W4`), during FR-7 work:
 
 | Suite | Result |
 |---|---|
@@ -80,6 +91,7 @@ Latest run with MSVC (`/std:c++17 /EHsc /W4`), during FR-13 work:
 | FR-4 `tests_fr4.cpp` | 26 passed, 0 failed |
 | FR-5 `tests_fr5.cpp` | 29 passed, 0 failed |
 | FR-6 `tests_fr6.cpp` | 19 passed, 0 failed |
+| FR-7 `tests_fr7.cpp` | 46 passed, 0 failed (also 46 / 0 with MinGW g++ 6.3.0 `-Wall -Wextra`) |
 | FR-13 `tests_fr13.cpp` | 58 passed, 0 failed (plus 12 checks inside the two restart processes, all passed) |
 
 - **FR-3 (`tests_fr3.cpp`)** is still parked: it is not compiled or run in any documented flow,
@@ -90,7 +102,7 @@ Latest run with MSVC (`/std:c++17 /EHsc /W4`), during FR-13 work:
   means "not run", not "failed".
 
 ## Build the application
-    cl /std:c++17 /EHsc /W4 main.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp storage.cpp auth.cpp /Fe:bank.exe
+    cl /std:c++17 /EHsc /W4 main.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp storage.cpp account_search.cpp auth.cpp /Fe:bank.exe
     .\bank.exe
 
 g++ equivalent: the same file list with `g++ -std=c++17 -Wall -Wextra -o bank.exe`.
@@ -179,6 +191,17 @@ see Data storage.
   remove the duplication.
 - A combined storage call for account + transaction would make deposits (and FR-4
   withdrawals) atomic.
+
+## FR-7 decisions (not specified in the SRS)
+- Access: `accountSearch()` (console) and `searchAccount(accountNo)` both require
+  `isEmployeeAuthenticated()`. The console flow checks it before prompting; nothing is read
+  from storage for an unauthenticated caller.
+- Search is an exact match on the account number (digits only, 1 to 2147483647).
+- Accounts of **every** status are found, including CLOSED; the status is shown with the
+  details. "Account not found" means no stored record has that number.
+- Shown: account number, name, address, contact number, balance (Rs., 2 decimals), status.
+  The **PIN is never shown**, and `searchAccount()` returns the account with `pin` cleared.
+- Search is read-only: it never calls `saveAccount`.
 
 ## FR-1 assumptions (not specified in the SRS)
 - 4-digit numeric PIN entered by the employee at account creation.

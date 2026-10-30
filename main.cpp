@@ -3,6 +3,7 @@
 #include <string>
 
 #include "account.h"
+#include "account_search.h"
 #include "auth.h"
 #include "transactions.h"
 #include "balance_enquiry.h"
@@ -14,6 +15,7 @@ void employeeMenu() {
     while (true) {
         std::cout << "\n=== Employee Menu ===\n"
                   << "1. Create Account\n"
+                  << "2. Search Account\n"
                   << "0. Back to Main Menu\n"
                   << "Enter choice: ";
 
@@ -24,6 +26,8 @@ void employeeMenu() {
 
         if (choice == "1") {
             createAccount();
+        } else if (choice == "2") {
+            accountSearch();
         } else {
             std::cout << "Invalid choice. Please try again.\n";
         }
