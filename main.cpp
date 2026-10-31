@@ -9,6 +9,7 @@
 #include "transactions.h"
 #include "balance_enquiry.h"
 #include "mini_statement.h"
+#include "account_closure.h"
 
 namespace {
 
@@ -18,6 +19,7 @@ void employeeMenu() {
                   << "1. Create Account\n"
                   << "2. Search Account\n"
                   << "3. Update Account\n"
+                  << "4. Close Account\n"
                   << "0. Back to Main Menu\n"
                   << "Enter choice: ";
 
@@ -32,6 +34,8 @@ void employeeMenu() {
             accountSearch();
         } else if (choice == "3") {
             accountUpdate();
+        } else if (choice == "4") {
+            accountClosure();
         } else {
             std::cout << "Invalid choice. Please try again.\n";
         }
