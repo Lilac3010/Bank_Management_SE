@@ -30,6 +30,7 @@
 #include "menu.h"
 #include "mini_statement.h"
 #include "models.h"
+#include "password_hash.h"
 #include "storage.h"
 #include "transactions.h"
 
@@ -38,12 +39,30 @@ using Text = const std::string&;
 
 // Presentation (Console UI)
 static_assert(std::is_same<decltype(&runMainMenu), void (*)()>::value, "runMainMenu()");
+static_assert(std::is_same<decltype(&runApplication), int (*)(int, char**)>::value,
+              "runApplication(argc, argv)");
 // Authentication (FR-10 / FR-11)
 static_assert(std::is_same<decltype(&loginEmployee), bool (*)()>::value, "loginEmployee()");
 static_assert(std::is_same<decltype(&isEmployeeAuthenticated), bool (*)()>::value,
               "isEmployeeAuthenticated()");
 static_assert(std::is_same<decltype(&authenticateCustomer), bool (*)(int, Text)>::value,
               "authenticateCustomer(accountNo, pin)");
+static_assert(std::is_same<decltype(&logoutEmployee), void (*)()>::value, "logoutEmployee()");
+static_assert(std::is_same<decltype(&createFirstEmployee),
+                           EmployeeSetupResult (*)(Text, Text)>::value,
+              "createFirstEmployee(username, password)");
+static_assert(std::is_same<decltype(&addEmployee),
+                           EmployeeSetupResult (*)(Text, Text, Text, Text)>::value,
+              "addEmployee(existingUsername, existingPassword, username, password)");
+static_assert(std::is_same<decltype(&employeeSetup), bool (*)()>::value, "employeeSetup()");
+// Password hashing (FR-10)
+static_assert(std::is_same<decltype(&pbkdf2HmacSha256),
+                           bool (*)(Text, Text, int, size_t, std::string&)>::value,
+              "pbkdf2HmacSha256(password, salt, iterations, length, out)");
+static_assert(std::is_same<decltype(&hashPassword), bool (*)(Text, std::string&)>::value,
+              "hashPassword(password, stored)");
+static_assert(std::is_same<decltype(&verifyPassword), bool (*)(Text, Text)>::value,
+              "verifyPassword(password, stored)");
 // Account Management (FR-1, FR-2, FR-7, FR-8, FR-9)
 static_assert(std::is_same<decltype(&createAccount), bool (*)()>::value, "createAccount()");
 static_assert(std::is_same<decltype(&createAccountWithDetails),
@@ -81,6 +100,10 @@ static_assert(std::is_same<decltype(&loadTransactions),
               "loadTransactions(transactions)");
 static_assert(std::is_same<decltype(&saveTransaction), bool (*)(const Transaction&)>::value,
               "saveTransaction(txn)");
+static_assert(std::is_same<decltype(&loadEmployees), bool (*)(std::vector<Employee>&)>::value,
+              "loadEmployees(employees)");
+static_assert(std::is_same<decltype(&saveEmployee), bool (*)(const Employee&)>::value,
+              "saveEmployee(employee)");
 
 namespace {
 
@@ -126,9 +149,12 @@ struct Module {
 };
 
 const std::vector<Module> MODULES = {
-    {"Console UI (NFR-2)", "Console UI", "menu.h", "menu.cpp", {"runMainMenu"}},
+    {"Console UI (NFR-2)", "Console UI", "menu.h", "menu.cpp", {"runMainMenu", "runApplication"}},
     {"FR-10 / FR-11 login", "Authentication", "auth.h", "auth.cpp",
-     {"loginEmployee", "isEmployeeAuthenticated", "authenticateCustomer"}},
+     {"loginEmployee", "isEmployeeAuthenticated", "authenticateCustomer", "logoutEmployee",
+      "createFirstEmployee", "addEmployee", "employeeSetup"}},
+    {"FR-10 password hashing", "Authentication", "password_hash.h", "password_hash.cpp",
+     {"pbkdf2HmacSha256", "hashPassword", "verifyPassword"}},
     {"FR-1 create account", "Account Management", "account.h", "account.cpp",
      {"createAccountWithDetails", "createAccount"}},
     {"FR-2 account numbers", "Account Management", "account.h", "account_number.cpp",
@@ -146,7 +172,8 @@ const std::vector<Module> MODULES = {
     {"FR-9 close account", "Account Management", "account_closure.h", "account_closure.cpp",
      {"closeAccount", "accountClosure"}},
     {"FR-13 storage", "File Storage", "storage.h", "storage.cpp",
-     {"loadAccounts", "saveAccount", "loadTransactions", "saveTransaction"}},
+     {"loadAccounts", "saveAccount", "loadTransactions", "saveTransaction", "loadEmployees",
+      "saveEmployee"}},
 };
 
 // True if `text` has `name(` not preceded by a letter, digit or '_' (so "deposit(" does not
@@ -182,6 +209,7 @@ const std::map<std::string, std::set<std::string>> ALLOWED = {
     // Interfaces: only the shared data structures
     {"auth.h", {}},
     {"menu.h", {}},
+    {"password_hash.h", {}},
     {"storage.h", {"models.h"}},
     {"account.h", {"models.h"}},
     {"account_search.h", {"models.h"}},
@@ -196,7 +224,8 @@ const std::map<std::string, std::set<std::string>> ALLOWED = {
                   "account_closure.h", "transactions.h", "balance_enquiry.h",
                   "mini_statement.h", "models.h"}},
     // Service / Business: own header, data structures, login and storage; never another feature
-    {"auth.cpp", {"auth.h", "models.h", "storage.h"}},
+    {"auth.cpp", {"auth.h", "models.h", "storage.h", "password_hash.h"}},
+    {"password_hash.cpp", {"password_hash.h"}},
     {"account.cpp", {"account.h", "models.h", "auth.h", "storage.h"}},
     {"account_number.cpp", {"account.h", "models.h"}},
     {"account_search.cpp", {"account_search.h", "models.h", "auth.h", "storage.h"}},
@@ -205,8 +234,9 @@ const std::map<std::string, std::set<std::string>> ALLOWED = {
     {"transactions.cpp", {"transactions.h", "models.h", "auth.h", "storage.h"}},
     {"balance_enquiry.cpp", {"balance_enquiry.h", "models.h", "auth.h", "storage.h"}},
     {"mini_statement.cpp", {"mini_statement.h", "models.h", "auth.h", "storage.h"}},
-    // Persistence: depends on nothing above it
-    {"storage.cpp", {"storage.h", "models.h"}},
+    // Persistence: depends on nothing above it. password_hash.h only for the header-only
+    // stored-hash format check (FR-10); no hashing code is linked into storage.
+    {"storage.cpp", {"storage.h", "models.h", "password_hash.h"}},
 };
 
 void testDependencies() {
@@ -244,8 +274,8 @@ int main() {
     std::cout << "NFR-4 modular-structure tests. Links no module; reads the source files from the\n"
                  "current folder (run from the repository root).\n\n";
 
-    // Reaching this line means all 23 static_asserts above compiled.
-    check(true, "Interfaces: 23 public functions match their expected signatures "
+    // Reaching this line means all 33 static_asserts above compiled.
+    check(true, "Interfaces: 33 public functions match their expected signatures "
                 "(static_assert at compile time)");
     testModuleMap();
     testDependencies();

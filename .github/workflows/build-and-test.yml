@@ -24,6 +24,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # FR-10: password_hash.cpp uses OpenSSL libcrypto on Linux. Installed explicitly so the
+      # build does not depend on what the runner image happens to include.
+      - name: Install OpenSSL development files (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev
+
       - name: Build and run test suites
         shell: pwsh
         run: ./build_and_test.ps1 -Compiler ${{ matrix.compiler }}

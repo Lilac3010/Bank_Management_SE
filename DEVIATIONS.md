@@ -174,14 +174,14 @@ we did, and what would close the gap.
   login shows a clear error and performs no operation, and the Employee Menu cannot be reached
   without a successful login. It deliberately also checks that there is **no lockout**: five
   failed employee logins in a row do not block a later correct one.
-- **Observed, not a gap:** `auth.cpp` keeps the employee logged in after `0. Back to Main Menu`
-  until the next login attempt; a failed attempt logs them out (tested). Through the menus this
-  cannot be used to skip a login, because the Employee Menu is only reached by main-menu option 1,
-  which always asks for the username and password again. Direct calls to the employee functions
-  would still succeed in that state; a logout on leaving the Employee Menu would be the FR-10
-  owner's change.
-- **To close (optional):** if the team wants an attempt limit or logout, add it to the SRS first
-  (new SEC requirement and test case), then to `auth.cpp`.
+- **Logout (closed by FR-10 on 2026-11-01):** `auth.cpp` used to keep the employee logged in
+  after `0. Back to Main Menu` until the next login attempt. FR-10 added `logoutEmployee()`;
+  `menu.cpp` calls it whenever the Employee Menu ends (`0` or end of input), so direct calls to
+  the employee functions are denied after leaving it too (`tests_fr10.cpp`). A failed attempt
+  still logs out. Two SEC-3 checks that read the login state right after the Employee Menu had
+  closed now expect "logged out"; see D-12.
+- **To close (optional):** if the team wants an attempt limit, add it to the SRS first (new SEC
+  requirement and test case), then to `auth.cpp`. There is still none.
 
 ## D-11 NFR-4: SAD §4.2 interface names, and how NFR-4 is verified
 
@@ -197,15 +197,15 @@ we did, and what would close the gap.
 
   | SAD §4.2 | Code |
   |---|---|
-  | `loginEmployee()`, `authenticateCustomer(accountNo, pin)` | Same; plus `isEmployeeAuthenticated()` |
+  | `loginEmployee()`, `authenticateCustomer(accountNo, pin)` | Same; plus `isEmployeeAuthenticated()`, and since FR-10 `logoutEmployee()`, `createFirstEmployee(...)`, `addEmployee(...)`, `employeeSetup()` and the `password_hash` module (D-12) |
   | `createAccount()` | `createAccount()` (console) and `createAccountWithDetails(...)`; FR-2 adds `generateAccountNumber(existing)` |
   | `searchAccount(accountNo)`, `closeAccount(accountNo)` | Same; plus console flows `accountSearch()`, `accountClosure()` |
   | `updateAccount()` | `updateAccountDetails(accountNo, name, address, contact)` and console `accountUpdate()` |
   | `deposit(accountNo, amount)`, `withdraw(accountNo, amount)` | Same, amount in paise; plus `depositMoney()`, `withdrawMoney()` |
   | `getBalance(accountNo)` | No separate function: console flow `balanceEnquiry()` reads storage directly |
   | `getMiniStatement(accountNo)` | No separate function: console flow `miniStatement()` reads storage directly |
-  | `loadAccounts()`, `saveAccount(account)`, `saveTransaction(txn)` | Same; plus `loadTransactions(transactions)` |
-  | (none) | `runMainMenu()` (D-8) |
+  | `loadAccounts()`, `saveAccount(account)`, `saveTransaction(txn)` | Same; plus `loadTransactions(transactions)`, and since FR-10 `loadEmployees(employees)`, `saveEmployee(employee)` |
+  | (none) | `runMainMenu()` (D-8); since FR-10 also `runApplication(argc, argv)` |
 
 - **Fixed:** `account_update.cpp` (FR-8) included `account_search.h` (FR-7) but used nothing
   from it. It was the only feature that included another feature's header, so the include was
@@ -215,3 +215,79 @@ we did, and what would close the gap.
   modules independent, as NFR-4 asks, at the cost of duplicate code.
 - **To close:** in the next SAD revision, update the §4.2 table with the names above (and decide
   whether `getBalance` / `getMiniStatement` should become separate functions).
+
+## D-12 FR-10: where employee credentials come from, and how they are stored
+
+- **Documents:** SRS FR-10: "The system shall authenticate an employee using a username and
+  password before administrative operations." SRS SEC-1, SEC-3; Test Plan TC-12; SAD §4.1
+  (`Employee`: username, password), §4.2 (`loginEmployee()`), §3 and §6 (no "encryption
+  infrastructure"). None of them says where employee credentials are kept, how they are
+  protected, how the first employee is created, or what a valid username or password is.
+- **What there was:** `auth.cpp` (PR #41) compared the input with one built-in demo account
+  (`admin` / `admin123`) written in the source, in plain text.
+- **What we do now** (team decisions of 2026-11-01, made with the FR-10 owner):
+  - No built-in credentials. Employees are records in `data/employees.txt`
+    (`username|passwordHash`), read and written by `storage.cpp` with the same strict reading and
+    safe writing as accounts. `saveEmployee` only adds a record: it never replaces or deletes one.
+  - Passwords are stored only as PBKDF2-HMAC-SHA256 hashes: 600,000 iterations (OWASP's current
+    figure for this algorithm), a 16-byte random salt and a 32-byte hash, as
+    `pbkdf2-sha256$600000$<salt hex>$<hash hex>`. The PBKDF2 and the random salt come from the
+    operating system's crypto library, not project code: Windows CNG (`BCryptDeriveKeyPBKDF2`,
+    `BCryptGenRandom`) and Linux OpenSSL (`PKCS5_PBKDF2_HMAC`, `RAND_bytes`). Both are checked
+    against the PBKDF2-HMAC-SHA256 vectors of RFC 7914 §11 and five other widely published vectors
+    (`tests_fr10.cpp`). Hashes are compared in constant time; a stored hash with any other form,
+    an iteration count outside 600,000 to 10,000,000, or wrong lengths makes the whole file
+    unreadable.
+  - Employees are added only with `bank.exe --add-employee`. The **first** employee can be created
+    only while no employees file exists; an unreadable or header-only file is never treated as
+    "no employees". **Every later** employee needs an existing employee's username and password,
+    checked against the stored records in that same call (`addEmployee`); a login session is not
+    accepted instead. These rules are in `createFirstEmployee` / `addEmployee` in `auth.cpp`,
+    not only in the console screen.
+  - Rules (not in the SRS): username 3-32 characters of letters, digits, `.`, `_`, `-`,
+    case-sensitive; password 8-128 characters, no line breaks; duplicate usernames rejected.
+  - Passwords are not echoed at a real console (Windows console mode / POSIX `termios`); with
+    redirected input nothing is changed, so scripts and tests work as before.
+  - Leaving the Employee Menu logs out (`logoutEmployee()`; closes the D-10 observation). No
+    attempt limit, as before (SEC-3 tests expect a correct login after five failures).
+  - The login messages are unchanged (`Employee login successful.`, `Invalid username or
+    password.`). New: `Storage error: could not read employee data.` and, with no employees
+    file, a pointer to `--add-employee`.
+- **Model change:** `Employee::password` became `Employee::passwordHash`. The struct was not used
+  anywhere before, and a field named `password` invites storing the password itself.
+- **Hashing vs. the SAD scope:** the SAD leaves out "encryption infrastructure". A one-way password
+  hash from the operating system's library needs no keys, certificates or services, so the team
+  treated it as in scope. This makes employee passwords and customer PINs inconsistent: **PINs are
+  still stored in plain text** (README Data storage). Hashing PINs would change FR-1, FR-8, FR-11
+  and the account file format; it is left to those owners and was not changed here.
+- **Limits that remain:**
+  - **First-employee trust:** whoever runs `--add-employee` first on an installation without an
+    employees file becomes the first employee. Deleting `data/employees.txt` returns an
+    installation to that state. Anyone who can delete that file can also edit `accounts.txt`
+    directly, so access to the `data/` folder is the real security boundary, as for every other
+    record (SRS §2.5: one local installation used at a time).
+  - No password change, password reset or employee removal (not in the SRS). A lost password can
+    only be recovered by restoring a backup of `data/employees.txt`.
+  - PBKDF2 is weaker than a memory-hard algorithm such as Argon2id against GPU attacks on a stolen
+    file. Argon2id was considered: it needs libsodium (not installed on this machine or on either
+    CI runner) or OpenSSL 3.2+ (`ubuntu-latest` has 3.0), so PBKDF2 from the built-in libraries
+    was chosen.
+  - Each password check takes about half a second (by design), so logins and the SEC-3 / FR-10
+    suites are slower. NFR-1 times only deposit, withdrawal and balance enquiry, not login.
+  - Checking "no employee yet" and saving the first one are two steps; two copies of the program
+    running at the same moment could both pass the check. The storage already assumes one running
+    copy at a time (README Data storage).
+  - **Verification gaps:** the Linux code (OpenSSL calls, `termios` echo handling) cannot be
+    built on the Windows development machine; only the `ubuntu-latest` CI job builds and tests it.
+    Hidden password input at a real console cannot be checked by the automated tests (they
+    redirect input); it needs one manual check on Windows and one on Linux.
+- **Tests changed outside FR-10:** `tests_sec3.cpp` (SEC-3) now creates its employee
+  (`admin` / `admin123`) in its temporary folder with `createFirstEmployee()` and includes the
+  employees file in its "nothing changed" check. Two of its checks read the login state just after
+  the Employee Menu had closed; with logout they now expect "Employee Menu shown, then logged out",
+  and the "failed login ends the session" check first logs in without the menu so that a session
+  is open. `tests_nfr2.cpp`, `tests_nfr3.cpp` and `tests_nfr5.cpp` got stand-ins for the two new
+  functions that `menu.cpp` calls; their checks are unchanged. `tests_nfr4.cpp` lists the new
+  functions and the `password_hash` module.
+- **To close:** in the next SRS / SAD revision, record where employee credentials live, the
+  setup command, the username and password rules, and the hashing choice (SAD §3, §4.1, §4.2).

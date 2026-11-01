@@ -48,6 +48,8 @@ int statementCalls = 0;
 bool loginEmployee() { ++fake::loginCalls; return fake::loginSucceeds; }
 bool isEmployeeAuthenticated() { return fake::employeeLoggedIn; }
 bool authenticateCustomer(int, const std::string&) { return false; }
+void logoutEmployee() {}            // FR-10; menu.cpp calls it on leaving the Employee Menu
+bool employeeSetup() { return false; }   // FR-10; reached only through bank.exe --add-employee
 
 bool createAccount()  { ++fake::createCalls;    return true; }
 bool accountSearch()  { ++fake::searchCalls;    return true; }

@@ -1,7 +1,7 @@
 // SEC-3 tests (Test Plan TC-12, TC-13): a failed employee or customer login shows a clear error
 // and performs NO operation; the Employee Menu cannot be reached without a successful login.
-// Build: g++ -std=c++17 -Wall -Wextra -o tests_sec3.exe tests_sec3.cpp menu.cpp auth.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp
-//    or: cl /std:c++17 /EHsc /W4 tests_sec3.cpp menu.cpp auth.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp /Fe:tests_sec3.exe
+// Build: g++ -std=c++17 -Wall -Wextra -o tests_sec3.exe tests_sec3.cpp menu.cpp auth.cpp password_hash.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp -lcrypto
+//    or: cl /std:c++17 /EHsc /W4 tests_sec3.cpp menu.cpp auth.cpp password_hash.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp /Fe:tests_sec3.exe
 //
 // NO test doubles: this is the bank.exe file list with this file in place of main.cpp. Every
 // menu case types its input into the REAL main menu (runMainMenu), as a user would.
@@ -34,13 +34,15 @@ namespace {
 
 namespace fs = std::filesystem;
 
-// Must match EMPLOYEE_USERNAME / EMPLOYEE_PASSWORD in auth.cpp (private to that file).
+// Test employee, created with createFirstEmployee() in the temporary folder (FR-10 keeps no
+// built-in credentials).
 const std::string USERNAME = "admin";
 const std::string PASSWORD = "admin123";
 
 const std::string TEMP_PREFIX = "bms_sec3_test_";
 const fs::path ACC_FILE = fs::path("data") / "accounts.txt";
 const fs::path TXN_FILE = fs::path("data") / "transactions.txt";
+const fs::path EMP_FILE = fs::path("data") / "employees.txt";
 
 const std::string EMPLOYEE_MENU = "=== Employee Menu ===";
 const std::string LOGIN_FAILED = "Invalid username or password.";
@@ -56,6 +58,7 @@ int failed = 0;
 
 std::string seedAccounts;
 std::string seedTransactions;
+std::string seedEmployees;
 fs::file_time_type oldTime;
 
 void check(bool condition, const std::string& name) {
@@ -92,16 +95,21 @@ void restoreSeed() {
     fs::create_directories("data", ec);
     writeBytes(ACC_FILE, seedAccounts);
     writeBytes(TXN_FILE, seedTransactions);
+    writeBytes(EMP_FILE, seedEmployees);
     fs::last_write_time(ACC_FILE, oldTime, ec);
     fs::last_write_time(TXN_FILE, oldTime, ec);
+    fs::last_write_time(EMP_FILE, oldTime, ec);
 }
 
 bool dataUnchanged() {
     std::error_code ec;
     return readBytes(ACC_FILE) == seedAccounts && readBytes(TXN_FILE) == seedTransactions
+           && readBytes(EMP_FILE) == seedEmployees
            && fs::last_write_time(ACC_FILE, ec) == oldTime
            && fs::last_write_time(TXN_FILE, ec) == oldTime
-           && !fs::exists(ACC_FILE.string() + ".tmp") && !fs::exists(TXN_FILE.string() + ".tmp");
+           && fs::last_write_time(EMP_FILE, ec) == oldTime
+           && !fs::exists(ACC_FILE.string() + ".tmp") && !fs::exists(TXN_FILE.string() + ".tmp")
+           && !fs::exists(EMP_FILE.string() + ".tmp");
 }
 
 std::string runMenu(const std::string& input) {
@@ -233,10 +241,16 @@ void testEmployeeOperationsDeniedAfterFailedLogin() {
 void testSuccessfulThenFailedLogin() {
     restoreSeed();
     std::string output = login(USERNAME, PASSWORD);
+    // Input ends inside the Employee Menu, which returns; since FR-10 that logs the employee out.
     check(contains(output, "Employee login successful.") && contains(output, EMPLOYEE_MENU)
-              && isEmployeeAuthenticated() && dataUnchanged(),
-          "TC-12 correct employee credentials: Employee Menu shown");
+              && contains(output, "Employee logged out.") && !isEmployeeAuthenticated()
+              && dataUnchanged(),
+          "TC-12 correct employee credentials: Employee Menu shown; leaving it logs out");
 
+    // A session that is still open (login without the menu), then a failed login.
+    std::string direct;
+    runFlow(loginEmployee, USERNAME + "\n" + PASSWORD + "\n", direct);
+    check(isEmployeeAuthenticated(), "(setup) employee logged in without the menu");
     output = login(USERNAME, "wrong");
     check(contains(output, LOGIN_FAILED) && !contains(output, EMPLOYEE_MENU)
               && !isEmployeeAuthenticated(),
@@ -250,7 +264,7 @@ void testNoLockout() {
     restoreSeed();
     for (int i = 0; i < 5; ++i) login(USERNAME, "wrong" + std::to_string(i));
     std::string output = login(USERNAME, PASSWORD);
-    check(contains(output, EMPLOYEE_MENU) && isEmployeeAuthenticated(),
+    check(contains(output, "Employee login successful.") && contains(output, EMPLOYEE_MENU),
           "No lockout: after 5 failed attempts the correct credentials still work");
     login(USERNAME, "wrong");   // leave the session logged out for the next tests
 }
@@ -300,9 +314,11 @@ bool createSeedData() {
     txn.dateTime = "2026-10-30 10:00:00";
     bool ok = saveAccount(makeAccount(100001, "1234", 100000, STATUS_ACTIVE))
               && saveAccount(makeAccount(100002, "5678", 50000, STATUS_CLOSED))
-              && saveTransaction(txn);
+              && saveTransaction(txn)
+              && createFirstEmployee(USERNAME, PASSWORD).success;
     seedAccounts = readBytes(ACC_FILE);
     seedTransactions = readBytes(TXN_FILE);
+    seedEmployees = readBytes(EMP_FILE);
     oldTime = fs::file_time_type::clock::now() - std::chrono::hours(24);
     return ok;
 }
@@ -333,7 +349,7 @@ int main() {
 
     bool seeded = createSeedData();
     check(seeded && !isEmployeeAuthenticated(),
-          "Seed data saved (100001 ACTIVE, 100002 CLOSED, 1 deposit); nobody logged in at start");
+          "Seed data saved (100001 ACTIVE, 100002 CLOSED, 1 deposit, employee admin); nobody logged in at start");
     if (seeded) {
         testFailedEmployeeLogin();
         testAdminKeysAfterFailedLogin();

@@ -8,6 +8,9 @@
 # MSVC is found with vswhere, so a normal PowerShell window works (no Developer prompt needed).
 # Suites that use storage.cpp need <filesystem>: MSVC 2019+ or g++ 8+. With an older g++ they
 # are SKIPPED with a message, not failed.
+# Suites with password_hash.cpp (FR-10) need the platform crypto library: on Windows, CNG
+# (bcrypt.lib, part of the Windows SDK; MSVC links it automatically); on Linux, OpenSSL
+# libcrypto (package libssl-dev), added here as -lcrypto.
 # Output goes to build/<compiler>/ (ignored by git). Exit code 0 only if nothing failed.
 param(
     [ValidateSet('auto', 'msvc', 'gcc')]
@@ -34,8 +37,9 @@ $suites = @(
     @{ Name = 'tests_nfr4'; Req = 'NFR-4'; NeedsFs = $false; Sources = @('tests_nfr4.cpp') },
     @{ Name = 'tests_fr13'; Req = 'FR-13'; NeedsFs = $true;  Sources = @('tests_fr13.cpp', 'storage.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp') },
     @{ Name = 'tests_nfr1'; Req = 'NFR-1'; NeedsFs = $true;  Sources = @('tests_nfr1.cpp', 'storage.cpp', 'transactions.cpp', 'balance_enquiry.cpp') },
-    @{ Name = 'tests_sec2'; Req = 'SEC-2'; NeedsFs = $true;  Sources = @('tests_sec2.cpp', 'auth.cpp', 'storage.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp') },
-    @{ Name = 'tests_sec3'; Req = 'SEC-3'; NeedsFs = $true;  Sources = @('tests_sec3.cpp', 'menu.cpp', 'auth.cpp', 'storage.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp', 'account_search.cpp', 'account_update.cpp', 'account_closure.cpp') },
+    @{ Name = 'tests_sec2'; Req = 'SEC-2'; NeedsFs = $true;  Crypto = $true; Sources = @('tests_sec2.cpp', 'auth.cpp', 'password_hash.cpp', 'storage.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp') },
+    @{ Name = 'tests_sec3'; Req = 'SEC-3'; NeedsFs = $true;  Crypto = $true; Sources = @('tests_sec3.cpp', 'menu.cpp', 'auth.cpp', 'password_hash.cpp', 'storage.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp', 'account_search.cpp', 'account_update.cpp', 'account_closure.cpp') },
+    @{ Name = 'tests_fr10'; Req = 'FR-10'; NeedsFs = $true;  Crypto = $true; Sources = @('tests_fr10.cpp', 'menu.cpp', 'auth.cpp', 'password_hash.cpp', 'storage.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp', 'account_search.cpp', 'account_update.cpp', 'account_closure.cpp') },
     @{ Name = 'tests_nfr3'; Req = 'NFR-3'; NeedsFs = $true;  Sources = @('tests_nfr3.cpp', 'menu.cpp', 'storage.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp', 'account_search.cpp', 'account_update.cpp', 'account_closure.cpp') },
     @{ Name = 'tests_nfr5'; Req = 'NFR-5'; NeedsFs = $true;  Sources = @('tests_nfr5.cpp', 'menu.cpp', 'storage.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp', 'account_search.cpp', 'account_update.cpp', 'account_closure.cpp') }
 )
@@ -99,15 +103,20 @@ Write-Host "NFR-5 build check"
 Write-Host "Compiler: $compilerInfo"
 Write-Host "Output:   $outDir"
 
+# g++ library for password_hash.cpp (MSVC needs none: the source asks for bcrypt.lib itself).
+$cryptoLibs = if ($onWindows) { @('-lbcrypt') } else { @('-lcrypto') }
+
 # Compiles and links one program. Returns $true on success.
-function Build-Program([string]$name, [string[]]$sources) {
+function Build-Program([string]$name, [string[]]$sources, [bool]$crypto = $false) {
     $exe = Join-Path $outDir "$name.exe"
     if ($Compiler -eq 'msvc') {
         $objDir = Join-Path $outDir "obj_$name"
         New-Item -ItemType Directory -Force -Path $objDir | Out-Null
         & cl /nologo /std:c++17 /EHsc /W4 @sources "/Fo$objDir\" "/Fe$exe" | Out-Host
     } else {
-        & g++ -std=c++17 -Wall -Wextra -o $exe @sources @fsLibs | Out-Host
+        $libs = @($fsLibs)
+        if ($crypto) { $libs += $cryptoLibs }
+        & g++ -std=c++17 -Wall -Wextra -o $exe @sources @libs | Out-Host
     }
     return ($LASTEXITCODE -eq 0)
 }
@@ -136,7 +145,7 @@ foreach ($suite in $suites) {
         Write-Host "SKIPPED: $fsSkipReason"
         $row.Build = 'SKIPPED'
         $row.Run = 'SKIPPED'
-    } elseif (-not (Build-Program $suite.Name $suite.Sources)) {
+    } elseif (-not (Build-Program $suite.Name $suite.Sources ([bool]$suite.Crypto))) {
         $row.Build = 'FAILED'
         $row.Run = 'not run'
         $anyFailed = $true
@@ -192,7 +201,7 @@ if (-not $filesystemOk) {
     $appRow.Build = 'SKIPPED'
     $appRow.Run = 'SKIPPED'
 } elseif ($haveAuth) {
-    if (Build-Program 'bank' ($appSources + 'auth.cpp')) { $appRow.Build = 'linked' } else { $appRow.Build = 'FAILED'; $anyFailed = $true }
+    if (Build-Program 'bank' ($appSources + 'auth.cpp' + 'password_hash.cpp') $true) { $appRow.Build = 'linked' } else { $appRow.Build = 'FAILED'; $anyFailed = $true }
 } else {
     Write-Host 'auth.cpp (FR-10 / FR-11) does not exist yet: compiling every bank.exe source, link skipped.'
     $objDir = Join-Path $outDir 'obj_bank'

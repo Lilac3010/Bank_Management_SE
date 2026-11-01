@@ -29,4 +29,16 @@ bool saveAccount(const Account& account);
 bool loadTransactions(std::vector<Transaction>& transactions);
 bool saveTransaction(const Transaction& txn);
 
+// FR-10 - employee records in data/employees.txt.
+// loadEmployees: fills `employees` and returns true.
+//   No data file yet -> true with an empty list (a new installation).
+//   File exists but cannot be read or parsed, holds no employee at all, has a duplicate
+//   username or a malformed password hash -> false. Never treated as an empty installation.
+// saveEmployee: ADDS one employee; never replaces or deletes an existing record. False if the
+//   username is empty or already stored, the password hash is malformed, the existing file
+//   cannot be read back, or on any I/O failure. Who may add an employee is decided by
+//   auth.cpp (createFirstEmployee / addEmployee), not here.
+bool loadEmployees(std::vector<Employee>& employees);
+bool saveEmployee(const Employee& employee);
+
 #endif

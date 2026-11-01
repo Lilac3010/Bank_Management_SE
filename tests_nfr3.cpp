@@ -40,6 +40,8 @@
 // Employee login always succeeds, so every Employee Menu flow can be reached.
 bool loginEmployee() { return true; }
 bool isEmployeeAuthenticated() { return true; }
+void logoutEmployee() {}            // FR-10; menu.cpp calls it on leaving the Employee Menu
+bool employeeSetup() { return false; }   // FR-10; reached only through bank.exe --add-employee
 
 // Accepts the stored PIN of a stored ACTIVE account, read through the real storage.
 bool authenticateCustomer(int accountNo, const std::string& pin) {
