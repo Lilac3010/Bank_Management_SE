@@ -61,3 +61,21 @@ we did, and what would close the gap.
   at the console, must be rejected with no change. TC-06 stays an FR-4 test (`tests_fr4.cpp`).
 - **To close:** in the next Test Plan revision, either add a "Withdraw zero/negative amount"
   case for SEC-4 or extend TC-04 to cover withdrawals, and update the RTM row for SEC-4.
+
+## D-6 NFR-1: TC-16 is an automated timing test, not a stopwatch on `bank.exe`
+
+- **Documents:** SRS NFR-1: "For normal local use, deposit, withdrawal and balance enquiry shall
+  complete within 2 seconds." Test Plan §3.3: "Performance will be checked with a stopwatch or
+  simple timing measurement"; TC-16: "Run representative deposit/withdrawal/balance operations
+  locally".
+- **What we do:** `bank.exe` cannot link until `auth.cpp` exists (D-1), so it cannot be run and
+  timed by hand. `tests_nfr1.cpp` instead times the same console flows (`depositMoney`,
+  `withdrawMoney`, `balanceEnquiry`) with `std::chrono::steady_clock`, using the real
+  `storage.cpp`, `transactions.cpp` and `balance_enquiry.cpp` on 500 accounts and 10000
+  transactions. Only customer login is a fake. It measures processing time (input given to
+  result printed), not the time a person spends typing. The Test Plan allows a "simple timing
+  measurement", so this is a change of tool, not of the requirement.
+- **Not covered:** the real FR-11 login cost. The fake reads the accounts file through real
+  storage, as a real login would, but the final `auth.cpp` may do more work.
+- **To close:** once `bank.exe` links, repeat TC-16 by hand on the real program (stopwatch, a few
+  runs of each operation) and add the result to the README Performance results.
