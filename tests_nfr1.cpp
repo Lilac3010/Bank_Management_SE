@@ -4,7 +4,7 @@
 //    or: cl /std:c++17 /EHsc /W4 tests_nfr1.cpp storage.cpp transactions.cpp balance_enquiry.cpp /Fe:tests_nfr1.exe
 //
 // Uses the REAL storage.cpp, transactions.cpp and balance_enquiry.cpp; only customer login is a
-// fake (auth.cpp does not exist yet). Each timed run is a whole console flow, from the typed
+// fake, so no credentials have to be typed. Each timed run is a whole console flow, from the typed
 // input to the printed result, so it includes reading and rewriting the data files.
 // Needs <filesystem> (storage.cpp): MSVC 2019+ or g++ 8+.
 // Data lives only in a temporary folder that this program creates and deletes.
@@ -26,7 +26,7 @@
 #include "transactions.h"
 
 // ===================== TEST-ONLY FAKES =====================
-// Stand-ins for auth.cpp (FR-10 / FR-11), which does not exist yet.
+// Stand-ins for auth.cpp (FR-10 / FR-11), so no credentials have to be typed.
 // Defined only in this file; never linked into main.
 
 // Accepts the stored PIN of a stored ACTIVE account, read through the real storage, so the
