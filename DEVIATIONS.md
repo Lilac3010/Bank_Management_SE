@@ -79,3 +79,37 @@ we did, and what would close the gap.
   storage, as a real login would, but the final `auth.cpp` may do more work.
 - **To close:** once `bank.exe` links, repeat TC-16 by hand on the real program (stopwatch, a few
   runs of each operation) and add the result to the README Performance results.
+
+## D-7 NFR-3: FR-8 / FR-9 accepted invalid input and changed stored records (fixed)
+
+- **Documents:** SRS NFR-3: "Invalid input shall be rejected without changing the affected
+  account balance or stored account record." Test Plan TC-14: invalid account number gives a
+  "Clear error; no unintended record/balance change". SAD §5: invalid account number, "do not
+  modify data".
+- **What was wrong** (found by `tests_nfr3.cpp`; 13 of its cases failed before the fix):
+  - `accountClosure()` and `accountUpdate()` read the account number with `std::cin >> int`,
+    which stops at the first non-digit. Typing `100001abc` or ` 100001 x` **closed** or
+    **updated** account 100001. Typing `1e5` or `100 001` was read as 1 or 100, and `-5` / `0`
+    reached the lookup, so the user saw "Account not found." instead of being told the number
+    was invalid.
+  - `updateAccountDetails()` accepted a name or address made only of spaces, and a name with no
+    letters (`...`), and saved it. FR-1 rejects all of these when an account is created.
+- **What changed** (kept small; owners: FR-8 / FR-9):
+  - `account_closure.cpp`, `account_update.cpp`: the account number is read as a whole line and
+    must be digits only (surrounding spaces ignored), 1 to 2147483647, the same rule as FR-5 /
+    FR-7. Anything else, or end of input, shows "Invalid account number." and nothing is loaded
+    or saved.
+  - `account_update.cpp` `updateAccountDetails()`: name, address and contact number are trimmed
+    first, and a name must contain at least one letter, the same rules as FR-1. FR-1's checks
+    are private to `account.cpp`, so the rules are **matched, not reused**: `trim` and the
+    letter rule are copied into `account_update.cpp` (as other modules already copy shared
+    helpers; see README Open points).
+  - Side effect of trimming: values are stored without surrounding spaces, and a contact number
+    typed with surrounding spaces (` 9876543210 `) is now accepted, as in FR-1.
+  - Messages are unchanged; making them consistent with other flows is NFR-2.
+- **Related structural change:** to test the main menu and Employee Menu, the menu loops moved
+  unchanged from `main.cpp` to `menu.cpp` (`runMainMenu()`); `main()` now only calls it. This
+  matches the SAD "Console UI" component and does not change behaviour.
+- **Not a gap:** at end of input (Ctrl+Z / Ctrl+D) some flows return without a message, because
+  nobody is left to read it. `tests_nfr3.cpp` still checks that nothing changed and that the
+  program returns.

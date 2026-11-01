@@ -32,12 +32,13 @@ $suites = @(
     @{ Name = 'tests_sec4'; Req = 'SEC-4'; NeedsFs = $false; Sources = @('tests_sec4.cpp', 'transactions.cpp') },
     @{ Name = 'tests_fr13'; Req = 'FR-13'; NeedsFs = $true;  Sources = @('tests_fr13.cpp', 'storage.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp') },
     @{ Name = 'tests_nfr1'; Req = 'NFR-1'; NeedsFs = $true;  Sources = @('tests_nfr1.cpp', 'storage.cpp', 'transactions.cpp', 'balance_enquiry.cpp') },
-    @{ Name = 'tests_nfr5'; Req = 'NFR-5'; NeedsFs = $true;  Sources = @('tests_nfr5.cpp', 'storage.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp', 'account_search.cpp', 'account_update.cpp', 'account_closure.cpp') }
+    @{ Name = 'tests_nfr3'; Req = 'NFR-3'; NeedsFs = $true;  Sources = @('tests_nfr3.cpp', 'menu.cpp', 'storage.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp', 'account_search.cpp', 'account_update.cpp', 'account_closure.cpp') },
+    @{ Name = 'tests_nfr5'; Req = 'NFR-5'; NeedsFs = $true;  Sources = @('tests_nfr5.cpp', 'menu.cpp', 'storage.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp', 'account_search.cpp', 'account_update.cpp', 'account_closure.cpp') }
 )
 
 # bank.exe sources. auth.cpp (FR-10 / FR-11) is linked in automatically once it exists;
 # until then these files are compiled but not linked.
-$appSources = @('main.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp',
+$appSources = @('main.cpp', 'menu.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp',
                 'balance_enquiry.cpp', 'mini_statement.cpp', 'storage.cpp', 'account_search.cpp',
                 'account_update.cpp', 'account_closure.cpp')
 
