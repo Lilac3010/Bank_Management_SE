@@ -4,8 +4,8 @@
 //
 // This is the bank.exe file list without main.cpp (this file has its own main(); main.cpp only
 // calls runMainMenu() in menu.cpp) and without
-// auth.cpp (FR-10 / FR-11, not written yet). If this program links, bank.exe will link once
-// auth.cpp provides the three functions faked below.
+// auth.cpp (FR-10 / FR-11; its three functions are faked below so no credentials have to be
+// typed). bank.exe itself, with the real auth.cpp, is built by build_and_test.ps1.
 // Needs <filesystem> (storage.cpp): MSVC 2019+ or g++ 8+.
 // Data lives only in a temporary folder that this program creates and deletes.
 #include <chrono>
@@ -29,7 +29,7 @@
 #include "transactions.h"
 
 // ===================== TEST-ONLY FAKES =====================
-// Stand-ins for auth.cpp (FR-10 / FR-11), the only bank.exe module that does not exist yet.
+// Stand-ins for auth.cpp (FR-10 / FR-11), so the smoke test needs no typed credentials.
 // Defined only in this file; never linked into main.
 namespace fake {
 bool employeeLoggedIn = true;

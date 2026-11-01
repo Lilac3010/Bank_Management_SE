@@ -4,8 +4,9 @@
 //    or: cl /std:c++17 /EHsc /W4 tests_nfr3.cpp menu.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp /Fe:tests_nfr3.exe
 //
 // Every case types its input into the REAL main menu (menu.cpp), so it goes through the same
-// menus and console flows as bank.exe, with the REAL storage.cpp. Only login is faked
-// (auth.cpp does not exist yet). Each case starts from the same saved data and then checks:
+// menus and console flows as bank.exe, with the REAL storage.cpp. Only login is faked, so no
+// credentials have to be typed (tests_sec2.cpp tests the real login). Each case starts from
+// the same saved data and then checks:
 //   - the expected error message was shown and no success message was shown;
 //   - data/accounts.txt and data/transactions.txt are byte-for-byte unchanged;
 //   - no save happened: every save rewrites a whole file, so each file's timestamp (set to a
@@ -33,7 +34,7 @@
 #include "transactions.h"
 
 // ===================== TEST-ONLY FAKES =====================
-// Stand-ins for auth.cpp (FR-10 / FR-11), which does not exist yet.
+// Stand-ins for auth.cpp (FR-10 / FR-11), so no credentials have to be typed.
 // Defined only in this file; never linked into main.
 
 // Employee login always succeeds, so every Employee Menu flow can be reached.

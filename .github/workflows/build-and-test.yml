@@ -1,6 +1,6 @@
 # NFR-5: build and run every active test suite on Windows (MSVC) and Linux (g++).
 # Each suite is built separately by build_and_test.ps1, never all .cpp files together.
-# bank.exe is compiled but not linked until auth.cpp (FR-10 / FR-11) exists; see DEVIATIONS.md.
+# The script also builds bank.exe (with auth.cpp since PR #41); see DEVIATIONS.md D-1.
 name: Build and test
 
 on:

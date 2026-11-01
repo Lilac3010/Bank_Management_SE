@@ -4,22 +4,25 @@ Places where the implementation or its verification differs from what the SRS (0
 (02) or SAD (03) says, and why. Each entry names the requirement, what the documents say, what
 we did, and what would close the gap.
 
-## D-1 NFR-5: `bank.exe` is compiled but not linked
+## D-1 NFR-5: `bank.exe` was compiled but not linked (closed)
 
+- **Status:** **closed on 2026-11-01.** `auth.cpp` was added by the SEC-1 pull request (#41).
+  With no change to the script or the workflow, `build_and_test.ps1` now links `bank.exe`, and
+  CI does so on `windows-latest` (MSVC) and `ubuntu-latest` (g++) on every push and pull request.
+  A scripted run of the MSVC build showed the main menu, employee login, account creation, a
+  deposit, and denial of a wrong PIN and a wrong employee password. Manual runs of `bank.exe`
+  (TC-12, TC-13, TC-16, TC-17) are no longer blocked.
 - **Documents:** SRS NFR-5: "The program shall compile using a standard C/C++ compiler on the
   target development OS". Test Plan TC-18 expects "Build succeeds"; Test Plan §3.4 entry
   criteria include "Test build can start and display the main menu".
-- **What we do:** `auth.cpp` (FR-10 / FR-11, owned by another team member) does not exist yet,
-  so `bank.exe` cannot link (unresolved `loginEmployee`, `isEmployeeAuthenticated`,
+- **What we did until then:** `auth.cpp` (FR-10 / FR-11, owned by another team member) did not
+  exist, so `bank.exe` could not link (unresolved `loginEmployee`, `isEmployeeAuthenticated`,
   `authenticateCustomer`). The CI workflow and `build_and_test.ps1` therefore:
-  - build and run every active test suite, each separately;
-  - build and run `tests_nfr5.cpp`, which links every real module of `bank.exe` except
+  - built and ran every active test suite, each separately;
+  - built and ran `tests_nfr5.cpp`, which links every real module of `bank.exe` except
     `main.cpp` and `auth.cpp` (login is faked) and runs one pass through FR-1 to FR-9 with real
-    storage;
-  - compile every `bank.exe` source file, including `main.cpp`, without linking.
-- **Closes when:** `auth.cpp` is added. The script then links `bank.exe` automatically, with
-  no change to the script or the workflow. The program cannot start and show the main menu
-  until then, so manual runs of `bank.exe` (TC-12, TC-13, TC-16, TC-17) are also waiting on it.
+    storage (it still does, as a smoke test that needs no typed credentials);
+  - compiled every `bank.exe` source file, including `main.cpp`, without linking.
 
 ## D-2 NFR-5: "standard C/C++ compiler" needs C++17 `<filesystem>`
 
@@ -68,17 +71,20 @@ we did, and what would close the gap.
   complete within 2 seconds." Test Plan §3.3: "Performance will be checked with a stopwatch or
   simple timing measurement"; TC-16: "Run representative deposit/withdrawal/balance operations
   locally".
-- **What we do:** `bank.exe` cannot link until `auth.cpp` exists (D-1), so it cannot be run and
+- **What we do:** when NFR-1 was done, `bank.exe` could not link (D-1), so it could not be run and
   timed by hand. `tests_nfr1.cpp` instead times the same console flows (`depositMoney`,
   `withdrawMoney`, `balanceEnquiry`) with `std::chrono::steady_clock`, using the real
   `storage.cpp`, `transactions.cpp` and `balance_enquiry.cpp` on 500 accounts and 10000
   transactions. Only customer login is a fake. It measures processing time (input given to
   result printed), not the time a person spends typing. The Test Plan allows a "simple timing
   measurement", so this is a change of tool, not of the requirement.
-- **Not covered:** the real FR-11 login cost. The fake reads the accounts file through real
-  storage, as a real login would, but the final `auth.cpp` may do more work.
-- **To close:** once `bank.exe` links, repeat TC-16 by hand on the real program (stopwatch, a few
-  runs of each operation) and add the result to the README Performance results.
+- **Login cost:** the fake reads the accounts file through real storage and searches it. The real
+  `authenticateCustomer()` added in PR #41 does the same work (one `loadAccounts` and a search),
+  so the measured times still apply.
+- **No longer blocked (2026-11-01):** `bank.exe` links since `auth.cpp` was added (D-1).
+- **To close:** repeat TC-16 by hand on the real `bank.exe` (stopwatch, a few runs of deposit,
+  withdrawal and balance enquiry) and add the result to the README Performance results. Not done
+  yet; it needs a person timing the program, so it is left for the team.
 
 ## D-7 NFR-3: FR-8 / FR-9 accepted invalid input and changed stored records (fixed)
 
