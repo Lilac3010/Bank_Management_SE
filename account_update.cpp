@@ -13,7 +13,7 @@
 
 namespace {
 
-// Remove leading and trailing spaces, as FR-1 does before validating (trim in account.cpp).
+// Remove leading and trailing spaces, as FR-1 does before validating.
 std::string trim(const std::string& text) {
     const size_t start = text.find_first_not_of(" \t\r\n");
     if (start == std::string::npos) {
@@ -24,8 +24,7 @@ std::string trim(const std::string& text) {
     return text.substr(start, end - start + 1);
 }
 
-// Accept a whole line of digits only (surrounding spaces are ignored) for a positive
-// number that fits in an int. Same rules as parseAccountNumber in account_search.cpp (FR-7).
+// Accept a whole line of digits only for a positive number that fits in an int.
 bool parseAccountNumber(const std::string& text, int& accountNo) {
     const std::string digits = trim(text);
     if (digits.empty() || digits.size() > 10) {
@@ -47,8 +46,8 @@ bool parseAccountNumber(const std::string& text, int& accountNo) {
     return true;
 }
 
-// Validate customer name: letters, spaces, dots and apostrophes, with at least one
-// letter. Same rule as isValidName in account.cpp (FR-1).
+// Validate customer name: letters, spaces, dots and apostrophes,
+// with at least one letter.
 bool isValidName(const std::string& name) {
     bool hasLetter = false;
 
@@ -79,9 +78,11 @@ bool isValidContactNumber(const std::string& contactNumber) {
 }
 
 // Check whether another active account already uses this contact number.
-bool isContactNumberInUse(const std::vector<Account>& accounts,
-                          int accountNo,
-                          const std::string& contactNumber) {
+bool isContactNumberInUse(
+    const std::vector<Account>& accounts,
+    int accountNo,
+    const std::string& contactNumber
+) {
     for (const Account& account : accounts) {
         if (account.accountNumber != accountNo &&
             account.status == "ACTIVE" &&
@@ -95,22 +96,31 @@ bool isContactNumberInUse(const std::vector<Account>& accounts,
 
 } // namespace
 
-UpdateAccountResult updateAccountDetails(int accountNo,
-                                         const std::string& name,
-                                         const std::string& address,
-                                         const std::string& contactNumber) {
+UpdateAccountResult updateAccountDetails(
+    int accountNo,
+    const std::string& name,
+    const std::string& address,
+    const std::string& contactNumber
+) {
+    // SEC-1: Only authenticated employees can update account details.
+    if (!isEmployeeAuthenticated()) {
+        return {false, "Access denied: employee login required."};
+    }
+
     if (accountNo <= 0) {
         return {false, "Error: Account number must be a positive whole number."};
     }
 
-    // Same rules as FR-1 account creation: surrounding spaces are ignored, so a value
-    // made only of spaces counts as empty.
+    // Same rules as FR-1 account creation: surrounding spaces are ignored.
     const std::string newName = trim(name);
     const std::string newAddress = trim(address);
     const std::string newContactNumber = trim(contactNumber);
 
     if (!isValidName(newName)) {
-        return {false, "Error: Invalid name. Use letters, spaces, dots or apostrophes."};
+        return {
+            false,
+            "Error: Invalid name. Use letters, spaces, dots or apostrophes."
+        };
     }
 
     if (newAddress.empty() || newAddress.find('|') != std::string::npos) {
@@ -118,7 +128,10 @@ UpdateAccountResult updateAccountDetails(int accountNo,
     }
 
     if (!isValidContactNumber(newContactNumber)) {
-        return {false, "Error: Contact number must contain exactly 10 digits."};
+        return {
+            false,
+            "Error: Contact number must contain exactly 10 digits."
+        };
     }
 
     std::vector<Account> accounts;
@@ -145,7 +158,10 @@ UpdateAccountResult updateAccountDetails(int accountNo,
     }
 
     if (isContactNumberInUse(accounts, accountNo, newContactNumber)) {
-        return {false, "Error: Contact number is already used by another active account."};
+        return {
+            false,
+            "Error: Contact number is already used by another active account."
+        };
     }
 
     // Update only the permitted customer details.
@@ -162,6 +178,7 @@ UpdateAccountResult updateAccountDetails(int accountNo,
 }
 
 bool accountUpdate() {
+    // SEC-1: Only authenticated employees can access account update.
     if (!isEmployeeAuthenticated()) {
         std::cout << "Access denied: employee login required.\n";
         return false;
@@ -169,10 +186,11 @@ bool accountUpdate() {
 
     std::string accountText;
     int accountNo = 0;
+
     std::cout << "\n--- Update Account ---\n";
     std::cout << "Account number: ";
 
-    // Read the whole line so input such as "100001abc" is rejected, not read as 100001.
+    // Read the whole line so input such as "100001abc" is rejected.
     if (!std::getline(std::cin, accountText) ||
         !parseAccountNumber(accountText, accountNo)) {
         std::cout << "Error: Account number must be a positive whole number.\n";
@@ -196,10 +214,12 @@ bool accountUpdate() {
             }
 
             found = true;
+
             std::cout << "\nCurrent customer details:\n";
             std::cout << "Name: " << account.name << '\n';
             std::cout << "Address: " << account.address << '\n';
             std::cout << "Contact number: " << account.contactNumber << '\n';
+
             break;
         }
     }
