@@ -1,4 +1,5 @@
 #include "storage.h"
+#include "password_hash.h"   // only the header-only isWellFormedPasswordHash; no crypto linked
 
 #include <climits>
 #include <filesystem>
@@ -19,9 +20,12 @@ const std::string ACCOUNTS_HEADER = "BMS-ACCOUNTS 1";
 const std::string TRANSACTIONS_HEADER = "BMS-TRANSACTIONS 1";
 const size_t ACCOUNT_FIELDS = 7;
 const size_t TRANSACTION_FIELDS = 5;
+const std::string EMPLOYEES_HEADER = "BMS-EMPLOYEES 1";
+const size_t EMPLOYEE_FIELDS = 2;
 
 fs::path accountsPath() { return fs::path(DATA_DIR) / "accounts.txt"; }
 fs::path transactionsPath() { return fs::path(DATA_DIR) / "transactions.txt"; }
+fs::path employeesPath() { return fs::path(DATA_DIR) / "employees.txt"; }
 
 enum class ReadResult { Missing, Ok, Failed };
 
@@ -172,6 +176,38 @@ ReadResult readTransactions(std::vector<Transaction>& transactions) {
     return ReadResult::Ok;
 }
 
+bool parseEmployee(const std::string& line, Employee& employee) {
+    std::vector<std::string> f;
+    if (!splitFields(line, f) || f.size() != EMPLOYEE_FIELDS) return false;
+    if (f[0].empty() || !isWellFormedPasswordHash(f[1])) return false;
+    employee.username = f[0];
+    employee.passwordHash = f[1];
+    return true;
+}
+
+// Loads every employee, rejecting the whole file on any bad or duplicate record. A file with
+// only the header is rejected too: saveEmployee never writes one, so it is not a new
+// installation and must not let anyone create a "first" employee.
+ReadResult readEmployees(std::vector<Employee>& employees) {
+    std::vector<std::string> lines;
+    ReadResult result = readRecordLines(employeesPath(), EMPLOYEES_HEADER, lines);
+    if (result != ReadResult::Ok) return result;
+    if (lines.empty()) return ReadResult::Failed;
+
+    std::set<std::string> usernames;
+    for (const std::string& line : lines) {
+        Employee employee;
+        if (!parseEmployee(line, employee) || !usernames.insert(employee.username).second)
+            return ReadResult::Failed;
+        employees.push_back(employee);
+    }
+    return ReadResult::Ok;
+}
+
+std::string employeeLine(const Employee& e) {
+    return escapeField(e.username) + "|" + escapeField(e.passwordHash);
+}
+
 std::string accountLine(const Account& a) {
     return std::to_string(a.accountNumber) + "|" + escapeField(a.name) + "|"
            + escapeField(a.address) + "|" + escapeField(a.contactNumber) + "|"
@@ -268,4 +304,27 @@ bool saveTransaction(const Transaction& txn) {
     for (const Transaction& t : transactions) lines.push_back(transactionLine(t));
     lines.push_back(transactionLine(txn));
     return writeFileAtomically(transactionsPath(), TRANSACTIONS_HEADER, lines);
+}
+
+bool loadEmployees(std::vector<Employee>& employees) {
+    std::vector<Employee> loaded;
+    if (readEmployees(loaded) == ReadResult::Failed) return false;
+    employees = std::move(loaded);
+    return true;
+}
+
+bool saveEmployee(const Employee& employee) {
+    if (employee.username.empty() || !isWellFormedPasswordHash(employee.passwordHash))
+        return false;
+
+    // Never overwrite a file that cannot be read back, and never replace a record.
+    std::vector<Employee> employees;
+    if (readEmployees(employees) == ReadResult::Failed) return false;
+    for (const Employee& existing : employees)
+        if (existing.username == employee.username) return false;
+
+    std::vector<std::string> lines;
+    for (const Employee& e : employees) lines.push_back(employeeLine(e));
+    lines.push_back(employeeLine(employee));
+    return writeFileAtomically(employeesPath(), EMPLOYEES_HEADER, lines);
 }

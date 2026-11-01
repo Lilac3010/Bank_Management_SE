@@ -16,7 +16,8 @@ Console C++ application (C++17). See the SRS, Test Plan and SAD PDFs for require
 | FR-9 close account (`account_closure.cpp`) | Implemented; Employee Menu option 4. Input checks tightened in NFR-3 (DEVIATIONS.md D-7); wording aligned in NFR-2 (D-9) |
 | Console menus (`menu.cpp`, `main.cpp`) | Main menu and Employee Menu in `runMainMenu()`; `main()` only calls it (DEVIATIONS.md D-8) |
 | FR-13 storage (`storage.cpp`) | Implemented (see Data storage) |
-| FR-10 / FR-11 auth (`auth.cpp`) | Implemented (SEC-1, PR #41). Verified with the real code: customer login (FR-11) by `tests_sec2.cpp`, employee login (FR-10) by `tests_sec3.cpp` |
+| FR-10 / FR-11 auth (`auth.cpp`) | Implemented (SEC-1, PR #41). Customer login (FR-11) verified by `tests_sec2.cpp` |
+| FR-10 employee login (`auth.cpp`, `password_hash.cpp`) | Implemented: employees in `data/employees.txt` with PBKDF2-HMAC-SHA256 hashes (no built-in credentials), first employee and later ones added with `bank.exe --add-employee`, logout on leaving the Employee Menu. Verified by `tests_fr10.cpp` and `tests_sec3.cpp` (see Employee logins and DEVIATIONS.md D-12) |
 | NFR-5 build on target OS (`build_and_test.ps1`, CI) | Implemented; `bank.exe` links and is built by CI on both runners (DEVIATIONS.md D-1, closed) |
 | SEC-2 customer access control | Met; verified by `tests_sec2.cpp` with the real `auth.cpp` and storage (Test Plan TC-13) |
 | SEC-3 failed login denies the operation | Met; verified by `tests_sec3.cpp` through the real menus (Test Plan TC-12, TC-13; see DEVIATIONS.md D-10) |
@@ -39,8 +40,13 @@ if nothing failed.
 - Programs and object files go to `build/<compiler>/`, which git ignores.
 - **Compiler versions:** C++17 with `<filesystem>` is needed for `storage.cpp`, so use
   **MSVC 2019+ or g++ 8+**. With an older g++ (for example MinGW g++ 6.3.0) the suites that use
-  `storage.cpp` (FR-13, NFR-1, NFR-3, NFR-5, SEC-2, SEC-3) and the `bank.exe` build are **skipped** with
+  `storage.cpp` (FR-13, NFR-1, NFR-3, NFR-5, SEC-2, SEC-3, FR-10) and the `bank.exe` build are **skipped** with
   a message; the other suites still build and run.
+- **Crypto library (FR-10):** `password_hash.cpp` uses the operating system's PBKDF2. On Windows
+  that is CNG (`bcrypt.lib`, part of the Windows SDK that MSVC already uses; the source asks the
+  MSVC linker for it, so `cl` commands need nothing extra). On Linux it is OpenSSL `libcrypto`:
+  install `libssl-dev` (Debian / Ubuntu) and add `-lcrypto` to g++ commands that include
+  `password_hash.cpp`. The script adds it automatically (`-lbcrypt` for g++ on Windows).
 - The script also builds `bank.exe` (it is interactive, so it is not run). Since `auth.cpp` was
   added in PR #41 it links; if `auth.cpp` were missing, the script would compile the other files
   and skip only the link.
@@ -48,8 +54,8 @@ if nothing failed.
   is left unchanged (see DEVIATIONS.md D-2).
 
 **CI:** `.github/workflows/build-and-test.yml` runs the same script on every push and pull
-request to `main`, on `windows-latest` (MSVC) and `ubuntu-latest` (g++). A pull request should
-only be merged when both jobs pass.
+request to `main`, on `windows-latest` (MSVC) and `ubuntu-latest` (g++). On Linux it first
+installs `libssl-dev` (FR-10). A pull request should only be merged when both jobs pass.
 
 ## Build and run FR-1 tests (no other modules needed)
     g++ -std=c++17 -Wall -Wextra -o tests.exe tests.cpp account.cpp
@@ -84,7 +90,8 @@ Each test suite uses its own test doubles:
   code. Only employee and customer login (`isEmployeeAuthenticated`, `authenticateCustomer`) are
   fakes. It works only inside a temporary folder it creates and deletes (see Data storage).
 - **`tests_nfr5.cpp` (NFR-5)** links the **real** code of every `bank.exe` module except
-  `main.cpp` and `auth.cpp`; only the three `auth.h` functions are fakes. It runs one pass
+  `main.cpp`, `auth.cpp` and `password_hash.cpp`; only the `auth.h` functions the menus use are
+  fakes (logout does nothing there). It runs one pass
   through FR-1 to FR-9 with real storage inside a temporary folder it creates and deletes.
 - **`tests_sec4.cpp` (SEC-4)** uses the real `transactions.cpp`, with fakes for customer login
   (`authenticateCustomer`) and storage. It calls `deposit()` / `withdraw()` directly and through
@@ -95,7 +102,7 @@ Each test suite uses its own test doubles:
   deletes.
 - **`tests_nfr3.cpp` (NFR-3)** types invalid input into the **real** menus (`menu.cpp`) and
   console flows with the **real** `storage.cpp`; only login (`loginEmployee`,
-  `isEmployeeAuthenticated`, `authenticateCustomer`) is faked. It works only inside a temporary
+  `isEmployeeAuthenticated`, `authenticateCustomer`, `logoutEmployee`, `employeeSetup`) is faked. It works only inside a temporary
   folder it creates and deletes.
 - **`tests_nfr2.cpp` (NFR-2)** uses the **real** menus (`menu.cpp`) and the **real** FR-8 / FR-9
   screens (`account_update.cpp`, `account_closure.cpp`). The other six features (create, search,
@@ -106,7 +113,12 @@ Each test suite uses its own test doubles:
   with a file that fakes login. It works only inside a temporary folder it creates and deletes.
 - **`tests_sec3.cpp` (SEC-3)** has **no test doubles** either: it is the `bank.exe` file list with
   itself in place of `main.cpp`, so it must **never** be linked with a file that fakes login,
-  storage or a feature. It works only inside a temporary folder it creates and deletes.
+  storage or a feature. It works only inside a temporary folder it creates and deletes, and
+  creates its test employee there with `createFirstEmployee()`.
+- **`tests_fr10.cpp` (FR-10)** has **no test doubles**: the `bank.exe` file list with itself in
+  place of `main.cpp`, including the real `auth.cpp`, `password_hash.cpp` and `storage.cpp`. It
+  works only inside a temporary folder it creates and deletes. It takes about a minute, because
+  every password hash costs about half a second (600,000 PBKDF2 iterations).
 - **`tests_nfr4.cpp` (NFR-4)** is built **alone**: it includes the headers but links no module,
   and reads the source files, so run it from the repository root.
 - Build the active suites **separately**, each from its source-file list:
@@ -124,8 +136,11 @@ Each test suite uses its own test doubles:
   - NFR-1: `tests_nfr1.cpp storage.cpp transactions.cpp balance_enquiry.cpp`
   - NFR-3: `tests_nfr3.cpp menu.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
   - NFR-5: `tests_nfr5.cpp menu.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
-  - SEC-2: `tests_sec2.cpp auth.cpp storage.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp`
-  - SEC-3: `tests_sec3.cpp menu.cpp auth.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
+  - SEC-2: `tests_sec2.cpp auth.cpp password_hash.cpp storage.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp`
+  - SEC-3: `tests_sec3.cpp menu.cpp auth.cpp password_hash.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
+  - FR-10: `tests_fr10.cpp menu.cpp auth.cpp password_hash.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
+
+  On Linux add `-lcrypto` to every g++ list that contains `password_hash.cpp`.
   - NFR-4: `tests_nfr4.cpp` (nothing else)
 
   Linking test files together fails, because each defines `main()` and the same fakes.
@@ -187,8 +202,9 @@ layers follow SAD §2.1: Presentation -> Service / Business -> Persistence.
 
 | Requirement | SAD component | Interface | Source | Public functions |
 |---|---|---|---|---|
-| Console UI (NFR-2) | Console UI | `menu.h` | `menu.cpp`, `main.cpp` | `runMainMenu()`; `main()` only calls it |
-| FR-10 / FR-11 login | Authentication | `auth.h` | `auth.cpp` | `loginEmployee()`, `isEmployeeAuthenticated()`, `authenticateCustomer(accountNo, pin)` |
+| Console UI (NFR-2) | Console UI | `menu.h` | `menu.cpp`, `main.cpp` | `runMainMenu()`, `runApplication(argc, argv)`; `main()` only calls `runApplication` |
+| FR-10 / FR-11 login | Authentication | `auth.h` | `auth.cpp` | `loginEmployee()`, `isEmployeeAuthenticated()`, `authenticateCustomer(accountNo, pin)`, `logoutEmployee()`, `createFirstEmployee(...)`, `addEmployee(...)`, `employeeSetup()` |
+| FR-10 password hashing | Authentication | `password_hash.h` | `password_hash.cpp` | `pbkdf2HmacSha256(...)`, `hashPassword(...)`, `verifyPassword(...)`; header-only `isWellFormedPasswordHash(...)` |
 | FR-1 create account | Account Management | `account.h` | `account.cpp` | `createAccountWithDetails(...)`, `createAccount()` |
 | FR-2 account numbers | Account Management | `account.h` | `account_number.cpp` | `generateAccountNumber(existing)` |
 | FR-3 / FR-4 deposit, withdrawal | Transaction Management | `transactions.h` | `transactions.cpp` | `deposit(accountNo, paise)`, `depositMoney()`, `withdraw(accountNo, paise)`, `withdrawMoney()` |
@@ -197,7 +213,7 @@ layers follow SAD §2.1: Presentation -> Service / Business -> Persistence.
 | FR-7 search account | Account Management | `account_search.h` | `account_search.cpp` | `searchAccount(accountNo)`, `accountSearch()` |
 | FR-8 update account | Account Management | `account_update.h` | `account_update.cpp` | `updateAccountDetails(...)`, `accountUpdate()` |
 | FR-9 close account | Account Management | `account_closure.h` | `account_closure.cpp` | `closeAccount(accountNo)`, `accountClosure()` |
-| FR-13 storage | File Storage / Transaction Log | `storage.h` | `storage.cpp` | `loadAccounts`, `saveAccount`, `loadTransactions`, `saveTransaction` |
+| FR-13 storage | File Storage / Transaction Log | `storage.h` | `storage.cpp` | `loadAccounts`, `saveAccount`, `loadTransactions`, `saveTransaction`; FR-10 adds `loadEmployees`, `saveEmployee` |
 | Shared data | (SAD §4.1) | `models.h` | none | `Account`, `Transaction`, `Employee`, status values |
 
 Dependency rules (checked by `tests_nfr4.cpp` on every build):
@@ -205,7 +221,10 @@ Dependency rules (checked by `tests_nfr4.cpp` on every build):
 - `main.cpp` includes only `menu.h`. `menu.cpp` may call login and every feature, never storage.
 - A feature `.cpp` includes its own header, `models.h`, `auth.h` and `storage.h`, and **never
   another feature's header**, so each feature can be changed on its own.
-- `storage.cpp` includes only `storage.h` / `models.h`; nothing below it depends upward.
+- `storage.cpp` includes only `storage.h` / `models.h`, plus `password_hash.h` for its
+  header-only stored-hash format check (FR-10; no crypto is linked into storage); nothing below
+  it depends upward.
+- `password_hash.cpp` includes only its own header; `auth.cpp` is its only user.
 - Each test suite links only the modules it tests, with its own fakes for the rest; this works
   only because the modules are separate.
 
@@ -220,11 +239,11 @@ would remove the copies, but every module and most test build lists would change
 
 g++ equivalent: `g++ -std=c++17 -Wall -Wextra -o tests_nfr4.exe tests_nfr4.cpp` (works with g++ 6.3).
 Run it from the repository root. It checks:
-- **Interfaces:** 23 `static_assert`s compare every public module function with the signature
+- **Interfaces:** 33 `static_assert`s compare every public module function with the signature
   above. A mismatch stops the build. Nothing is called, so nothing needs to be linked.
 - **Module map:** each row of the table has its header and source file, and both name its
   functions.
-- **Dependencies:** the `#include "..."` lines of all 23 production `.h` / `.cpp` files follow the
+- **Dependencies:** the `#include "..."` lines of all 25 production `.h` / `.cpp` files follow the
   rules above, and none includes a `.cpp` or test file. The test only checks the files in its
   table: add any new production file to the table in `tests_nfr4.cpp` so its dependencies are
   checked too.
@@ -234,14 +253,16 @@ prove each header includes what it needs and has a working include guard (summar
 `headers`).
 
 ## Build and run SEC-3 failed-authentication tests (whole program, no test doubles)
-    cl /std:c++17 /EHsc /W4 tests_sec3.cpp menu.cpp auth.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp /Fe:tests_sec3.exe
+    cl /std:c++17 /EHsc /W4 tests_sec3.cpp menu.cpp auth.cpp password_hash.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp /Fe:tests_sec3.exe
     .\tests_sec3.exe
 
-g++ equivalent (g++ 8+ only): the same file list with `g++ -std=c++17 -Wall -Wextra -o tests_sec3.exe`.
+g++ equivalent (g++ 8+ only): the same file list with `g++ -std=c++17 -Wall -Wextra -o tests_sec3.exe`
+(add `-lcrypto` on Linux).
 
 Covers SRS SEC-3 and Test Plan TC-12 and TC-13. Input is typed into the real main menu, as in
-`bank.exe`. The test repeats the demo employee credentials from `auth.cpp`; if they are changed
-there, change `USERNAME` / `PASSWORD` in `tests_sec3.cpp` too.
+`bank.exe`. Since FR-10 there are no built-in credentials: the test creates its own employee
+(`admin` / `admin123`) in its temporary folder with `createFirstEmployee()`, and the employees
+file is part of the "no operation" check.
 - **Employee (TC-12):** wrong password, wrong username, username or password in other case, empty
   username and password, a leading space, and input ending early. Each shows `Invalid username or
   password.`, never shows the Employee Menu, leaves nobody logged in and saves nothing. Typing the
@@ -249,20 +270,23 @@ there, change `USERNAME` / `PASSWORD` in `tests_sec3.cpp` too.
   ACTIVE, no account created). After a failed login, `createAccountWithDetails`, `searchAccount`,
   `updateAccountDetails`, `closeAccount` and their four screens all answer `Access denied:
   employee login required.` without showing a screen or saving. The correct credentials open
-  the Employee Menu; a failed login after that logs the employee out again.
+  the Employee Menu, and leaving it logs the employee out (FR-10); a failed login after a
+  successful one logs the employee out again.
 - **Customer (TC-13):** wrong PIN, unknown account and CLOSED account for deposit, withdrawal,
   balance enquiry and mini-statement from the main menu. Each shows `Access denied: invalid
   account number or PIN.` and never reaches the amount prompt or shows data.
-- **"No operation"** means no success output, both data files (balances, account records and the
-  transaction log) byte-for-byte unchanged, and no save at all (file timestamps untouched).
+- **"No operation"** means no success output, the data files (balances, account records, the
+  transaction log and the employee records) byte-for-byte unchanged, and no save at all (file
+  timestamps untouched).
 - **No lockout:** five failed employee logins in a row do not block a later correct one. The SRS
   does not ask for an attempt limit (DEVIATIONS.md D-10).
 
 ## Build and run SEC-2 customer access-control tests (real login and storage, no test doubles)
-    cl /std:c++17 /EHsc /W4 tests_sec2.cpp auth.cpp storage.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp /Fe:tests_sec2.exe
+    cl /std:c++17 /EHsc /W4 tests_sec2.cpp auth.cpp password_hash.cpp storage.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp /Fe:tests_sec2.exe
     .\tests_sec2.exe
 
-g++ equivalent (g++ 8+ only): the same file list with `g++ -std=c++17 -Wall -Wextra -o tests_sec2.exe`.
+g++ equivalent (g++ 8+ only): the same file list with `g++ -std=c++17 -Wall -Wextra -o tests_sec2.exe`
+(add `-lcrypto` on Linux).
 
 Covers SRS SEC-2 and Test Plan TC-13 (customer part). Saved data: 100001 ACTIVE (PIN 1234),
 100002 CLOSED (PIN 5678), 100003 ACTIVE (PIN 4321). For each of deposit, withdrawal, balance
@@ -390,8 +414,9 @@ Data: 500 accounts (`accounts.txt` 36799 bytes), 10000 transactions (`transactio
   are printed in the job log and vary with runner load.
 
 ## Verification status
-Latest run on 2026-11-01 with `build_and_test.ps1`, during NFR-4 work, on Windows 11 with
-MSVC 2022 19.41 (`/std:c++17 /EHsc /W4`) and MinGW g++ 6.3.0 (`-Wall -Wextra`):
+Latest run on 2026-11-01 with `build_and_test.ps1`, during FR-10 work, on Windows 11 with
+MSVC 2022 19.41 (`/std:c++17 /EHsc /W4`) and MinGW g++ 6.3.0 (`-Wall -Wextra`). Linux (g++ with
+OpenSSL) is checked only by CI; see the note under the table.
 
 | Suite | MSVC 2022 | g++ 6.3.0 |
 |---|---|---|
@@ -411,12 +436,16 @@ MSVC 2022 19.41 (`/std:c++17 /EHsc /W4`) and MinGW g++ 6.3.0 (`-Wall -Wextra`):
 | NFR-3 `tests_nfr3.cpp` | 95 passed, 0 failed | Skipped: needs g++ 8+ |
 | NFR-5 `tests_nfr5.cpp` | 12 passed, 0 failed | Skipped: needs g++ 8+ |
 | SEC-2 `tests_sec2.cpp` | 44 passed, 0 failed | Skipped: needs g++ 8+ |
-| SEC-3 `tests_sec3.cpp` | 35 passed, 0 failed | Skipped: needs g++ 8+ |
-| NFR-4 `tests_nfr4.cpp` | 36 passed, 0 failed | 36 passed, 0 failed |
-| NFR-4 header check | all 11 headers compile alone | all 11 headers compile alone |
-| `bank.exe` | Linked (not run: interactive) | Skipped: needs g++ 8+ |
+| SEC-3 `tests_sec3.cpp` | 36 passed, 0 failed | Skipped: needs g++ 8+ |
+| FR-10 `tests_fr10.cpp` | 146 passed, 0 failed (Windows CNG; about 50 s) | Skipped: needs g++ 8+ |
+| NFR-4 `tests_nfr4.cpp` | 39 passed, 0 failed | 39 passed, 0 failed |
+| NFR-4 header check | all 12 headers compile alone | all 12 headers compile alone |
+| `bank.exe` | Linked (not run: interactive; a scripted run is described under Employee logins) | Skipped: needs g++ 8+ |
 
 CI (`windows-latest` MSVC, `ubuntu-latest` g++) runs the same script on every pull request.
+**The Linux side of FR-10** (`password_hash.cpp` with OpenSSL, and the terminal echo code in
+`auth.cpp`) cannot be built on the Windows development machine, so it is verified **only** by the
+`ubuntu-latest` CI job. Check that job before merging the FR-10 pull request.
 
 - **FR-3 (`tests_fr3.cpp`)** is still parked: it is not part of `build_and_test.ps1`, CI or any
   documented flow, because its test program was blocked by Windows Smart App Control earlier.
@@ -429,28 +458,67 @@ CI (`windows-latest` MSVC, `ubuntu-latest` g++) runs the same script on every pu
   means "not run", not "failed".
 
 ## Build the application
-    cl /std:c++17 /EHsc /W4 main.cpp menu.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp storage.cpp account_search.cpp account_update.cpp account_closure.cpp auth.cpp /Fe:bank.exe
+    cl /std:c++17 /EHsc /W4 main.cpp menu.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp storage.cpp account_search.cpp account_update.cpp account_closure.cpp auth.cpp password_hash.cpp /Fe:bank.exe
     .\bank.exe
 
-g++ equivalent (g++ 8+ only): the same file list with `g++ -std=c++17 -Wall -Wextra -o bank.exe`.
-`build_and_test.ps1` also builds it, as `build/<compiler>/bank.exe`.
+g++ equivalent (g++ 8+ only): the same file list with `g++ -std=c++17 -Wall -Wextra -o bank.exe`,
+plus `-lcrypto` on Linux (needs `libssl-dev`). `build_and_test.ps1` also builds it, as
+`build/<compiler>/bank.exe`.
 
 Run `bank.exe` from the folder where you want the data kept (normally the repository root);
-see Data storage. The first run starts with no accounts:
-1. Main menu `1` (Employee Login). The demo username and password are set in `auth.cpp`
-   (`EMPLOYEE_USERNAME`, `EMPLOYEE_PASSWORD`); change them there if the team agrees.
-2. Employee Menu `1` to create an account; note the account number and the 4-digit PIN.
-3. `0` back to the main menu, then `2` to `5` for deposit, withdrawal, balance and
-   mini-statement with that account number and PIN.
+see Data storage. The first run starts with no accounts and **no employee login**:
+1. Create the first employee once: `.\bank.exe --add-employee` (see Employee logins).
+2. Start `.\bank.exe`, main menu `1` (Employee Login) with that username and password.
+3. Employee Menu `1` to create an account; note the account number and the 4-digit PIN.
+4. `0` back to the main menu (this logs the employee out), then `2` to `5` for deposit,
+   withdrawal, balance and mini-statement with that account number and PIN.
 
-Checked on 2026-11-01 with a scripted run of the MSVC build in an empty folder: employee login,
-account creation, a deposit, a wrong PIN (denied) and a wrong employee password (denied), with
-the expected records in `data/`.
+## Employee logins (FR-10)
+There are **no built-in credentials**. Employees are stored in `data/employees.txt` (see Data
+storage) and are added only with the setup command:
+
+    .\bank.exe --add-employee
+
+- **First employee:** allowed only while no employees file exists. The command asks for a new
+  username and the password twice.
+- **Every later employee:** the command first asks for an **existing** employee's username and
+  password and checks them against the stored records in that run (a login from the menus or an
+  earlier run is never reused). Wrong credentials stop the command before any new details are
+  asked for. Then it asks for the new username and the password twice.
+- **Rules:** username 3-32 characters of letters, digits, `.`, `_` and `-`, case-sensitive
+  (`Asha` and `asha` are different employees). Password 8-128 characters, no line breaks.
+  A username that already exists is rejected; existing records are never replaced or deleted.
+- **Unreadable file:** if `data/employees.txt` exists but cannot be read (wrong header, header
+  only, a malformed record or hash, a duplicate username), the command and the login both refuse
+  with `Storage error: could not read employee data.`. Such a file is never treated as "no
+  employees", so it cannot be used to create a new first employee. Fix or restore the file.
+- **Exit code:** 0 when an employee was added, 1 otherwise; any other argument prints the usage
+  and returns 2.
+- **Passwords** are not echoed while typed at a real console (Windows console or Linux
+  terminal). When input is redirected (scripts, tests) nothing is changed.
+- **Login:** main menu `1`. Wrong username and wrong password give the same `Invalid username or
+  password.`; with no employees file the login says to run `--add-employee`. There is no attempt
+  limit (SEC-3 tests expect none).
+- **Logout:** leaving the Employee Menu (`0`, or end of input) prints `Employee logged out.` and
+  ends the session; every employee operation is denied again until the next login.
+- **How passwords are stored:** PBKDF2-HMAC-SHA256 with 600,000 iterations, a 16-byte random salt
+  and a 32-byte hash, computed by the operating system's crypto library (Windows CNG, Linux
+  OpenSSL), never by project code. The stored hash is compared in constant time. Each password
+  check takes about half a second on purpose.
+- **Lost password:** there is no reset. Back up `data/`; restoring an old `employees.txt` is the
+  only way back. See DEVIATIONS.md D-12 for the limits of this design.
+
+Checked on 2026-11-01 with a scripted run of the MSVC `bank.exe` in an empty folder: first
+employee added; second setup refused with a wrong existing password; second employee added with
+the correct one; duplicate username refused; unknown argument printed the usage (exit 2); login,
+account search, `0` printed `Employee logged out.`; a wrong password was refused. The employees
+file held only the two hash records.
 
 ## Data storage (FR-13)
-- **Location:** `data/accounts.txt` and `data/transactions.txt`, relative to the folder the
-  program is started from. `data/` is created on the first save; on first launch there are no
-  files and the program starts with no accounts and no transactions.
+- **Location:** `data/accounts.txt`, `data/transactions.txt` and (FR-10) `data/employees.txt`,
+  relative to the folder the program is started from. `data/` is created on the first save; on
+  first launch there are no files and the program starts with no accounts, no transactions and
+  no employees.
 - **Not committed:** `data/` is listed in `.gitignore`. Never commit real or test banking data.
 - **Reset:** close the program and delete `data/`. Back it up first if you need the records.
 - **Format:** UTF-8 text, one record per line, fields separated by `|`, after a header line:
@@ -461,8 +529,15 @@ the expected records in `data/`.
       BMS-TRANSACTIONS 1
       1|100001|DEPOSIT|50000|2026-10-27 14:30:00
 
+      BMS-EMPLOYEES 1
+      asha.rao|pbkdf2-sha256$600000$<32 hex digits: salt>$<64 hex digits: hash>
+
   - Account fields: `accountNumber|name|address|contactNumber|pin|balance|status`.
   - Transaction fields: `transactionId|accountNumber|type|amount|dateTime`.
+  - Employee fields: `username|passwordHash`. The password itself is never stored. A record is
+    only ever added (never replaced), a header-only employees file is unreadable (the program
+    never writes one), and the hash must have exactly the form above with 600,000 to 10,000,000
+    iterations and lowercase hex.
   - Money is integer paise (`150000` = Rs. 1500.00), never a decimal number.
   - Spaces are stored as-is. In text fields `\`, `|`, newline and carriage return are written
     as `\\`, `\|`, `\n` and `\r`, so any text round-trips safely.
@@ -476,7 +551,8 @@ the expected records in `data/`.
 - **Records are never deleted:** updates replace the record with the same account number in
   place; CLOSED accounts stay stored, which FR-2 relies on.
 - **PINs are stored in plain text.** This is an academic simulation (SAD §3 excludes
-  encryption); do not use real PINs.
+  encryption); do not use real PINs. Employee passwords, by contrast, are stored only as
+  PBKDF2 hashes (FR-10); see DEVIATIONS.md D-12 for why the two differ.
 - **Consistency limit:** each file is updated all-or-nothing, but a deposit or withdrawal
   updates two files. FR-3 / FR-4 save the account first and, if the transaction cannot be
   saved, restore the original account (tested with real files). If that restore also fails,

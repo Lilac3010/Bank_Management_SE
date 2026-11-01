@@ -64,6 +64,8 @@ void runMainMenu() {
         if (choice == "1") {
             if (loginEmployee()) {
                 employeeMenu();
+                logoutEmployee();   // FR-10: the session ends with the Employee Menu
+                std::cout << "Employee logged out.\n";
             } else {
                 std::cout << "Returning to main menu.\n";
             }
@@ -79,4 +81,17 @@ void runMainMenu() {
             std::cout << "Invalid choice. Please try again.\n";
         }
     }
+}
+
+int runApplication(int argc, char* argv[]) {
+    if (argc <= 1) {
+        runMainMenu();
+        return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--add-employee") {
+        return employeeSetup() ? 0 : 1;
+    }
+    std::cout << "Usage: bank.exe                  start the banking menus\n"
+                 "       bank.exe --add-employee   add an employee login\n";
+    return 2;
 }

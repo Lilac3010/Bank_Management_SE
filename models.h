@@ -25,9 +25,10 @@ struct Transaction {
     std::string dateTime;        // e.g. "2026-10-24 14:30:00"
 };
 
+// FR-10: the password itself is never kept; see password_hash.h for the stored form.
 struct Employee {
     std::string username;
-    std::string password;
+    std::string passwordHash;    // pbkdf2-sha256$<iterations>$<salt hex>$<hash hex>
 };
 
 #endif

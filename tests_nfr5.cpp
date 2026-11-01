@@ -4,7 +4,7 @@
 //
 // This is the bank.exe file list without main.cpp (this file has its own main(); main.cpp only
 // calls runMainMenu() in menu.cpp) and without
-// auth.cpp (FR-10 / FR-11; its three functions are faked below so no credentials have to be
+// auth.cpp (FR-10 / FR-11; the functions the menus use are faked below so no credentials have to be
 // typed). bank.exe itself, with the real auth.cpp, is built by build_and_test.ps1.
 // Needs <filesystem> (storage.cpp): MSVC 2019+ or g++ 8+.
 // Data lives only in a temporary folder that this program creates and deletes.
@@ -38,6 +38,10 @@ bool employeeLoggedIn = true;
 bool loginEmployee() { return fake::employeeLoggedIn; }
 
 bool isEmployeeAuthenticated() { return fake::employeeLoggedIn; }
+
+// FR-10: menu.cpp calls these; the smoke test keeps its session, so logout does nothing here.
+void logoutEmployee() {}
+bool employeeSetup() { return false; }
 
 // Accepts the stored PIN of a stored ACTIVE account, read through the real storage.
 bool authenticateCustomer(int accountNo, const std::string& pin) {
