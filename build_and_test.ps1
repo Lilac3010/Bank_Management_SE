@@ -31,6 +31,7 @@ $suites = @(
     @{ Name = 'tests_fr9';  Req = 'FR-9';  NeedsFs = $false; Sources = @('tests_fr9.cpp', 'account_closure.cpp') },
     @{ Name = 'tests_sec4'; Req = 'SEC-4'; NeedsFs = $false; Sources = @('tests_sec4.cpp', 'transactions.cpp') },
     @{ Name = 'tests_nfr2'; Req = 'NFR-2'; NeedsFs = $false; Sources = @('tests_nfr2.cpp', 'menu.cpp', 'account_update.cpp', 'account_closure.cpp') },
+    @{ Name = 'tests_nfr4'; Req = 'NFR-4'; NeedsFs = $false; Sources = @('tests_nfr4.cpp') },
     @{ Name = 'tests_fr13'; Req = 'FR-13'; NeedsFs = $true;  Sources = @('tests_fr13.cpp', 'storage.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp') },
     @{ Name = 'tests_nfr1'; Req = 'NFR-1'; NeedsFs = $true;  Sources = @('tests_nfr1.cpp', 'storage.cpp', 'transactions.cpp', 'balance_enquiry.cpp') },
     @{ Name = 'tests_sec2'; Req = 'SEC-2'; NeedsFs = $true;  Sources = @('tests_sec2.cpp', 'auth.cpp', 'storage.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp') },
@@ -154,6 +155,32 @@ foreach ($suite in $suites) {
     }
     $results += [pscustomobject]$row
 }
+
+# ---- NFR-4: every header compiles on its own, and twice in a row (include guard) ----
+Write-Host ""
+Write-Host "===== Headers (NFR-4): each .h compiled alone, included twice ====="
+$headerDir = Join-Path $outDir 'headers'
+New-Item -ItemType Directory -Force -Path $headerDir | Out-Null
+$headers = @(Get-ChildItem -Name -Filter *.h | Sort-Object)
+$badHeaders = @()
+foreach ($h in $headers) {
+    $tu = Join-Path $headerDir ([System.IO.Path]::GetFileNameWithoutExtension($h) + '_alone.cpp')
+    Set-Content -Path $tu -Value "#include `"$h`"`n#include `"$h`"`n" -Encoding ascii
+    if ($Compiler -eq 'msvc') {
+        & cl /nologo /std:c++17 /EHsc /W4 /Zs /I. $tu | Out-Host
+    } else {
+        & g++ -std=c++17 -Wall -Wextra -fsyntax-only -I. $tu | Out-Host
+    }
+    if ($LASTEXITCODE -ne 0) { $badHeaders += $h }
+}
+$headerRow = [ordered]@{ Suite = 'headers'; Req = 'NFR-4'; Build = ''; Run = 'n/a (compile only)' }
+if ($badHeaders.Count -eq 0) {
+    $headerRow.Build = "all $($headers.Count) compile alone"
+} else {
+    $headerRow.Build = "FAILED: $($badHeaders -join ' ')"
+    $anyFailed = $true
+}
+$results += [pscustomobject]$headerRow
 
 # ---- bank.exe ----
 Write-Host ""

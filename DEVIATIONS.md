@@ -182,3 +182,36 @@ we did, and what would close the gap.
   owner's change.
 - **To close (optional):** if the team wants an attempt limit or logout, add it to the SRS first
   (new SEC requirement and test case), then to `auth.cpp`.
+
+## D-11 NFR-4: SAD §4.2 interface names, and how NFR-4 is verified
+
+- **Documents:** SRS NFR-4: "Each major feature shall be implemented in a separate
+  function/module so that individual features can be modified independently." SRS RTM: verified
+  by "Code review"; Test Plan TC-18: "inspect module structure". SAD §4.2 lists suggested
+  function names and says they "are illustrative and may be changed during implementation".
+- **What we do:** the code review is backed by automated checks that run on every build:
+  `tests_nfr4.cpp` (function signatures, one header and source per feature, and include rules
+  between layers) and the header check in `build_and_test.ps1`. The README Module map is the
+  review record.
+- **SAD names vs. code** (allowed by SAD §4.2, listed so the SAD can be updated):
+
+  | SAD §4.2 | Code |
+  |---|---|
+  | `loginEmployee()`, `authenticateCustomer(accountNo, pin)` | Same; plus `isEmployeeAuthenticated()` |
+  | `createAccount()` | `createAccount()` (console) and `createAccountWithDetails(...)`; FR-2 adds `generateAccountNumber(existing)` |
+  | `searchAccount(accountNo)`, `closeAccount(accountNo)` | Same; plus console flows `accountSearch()`, `accountClosure()` |
+  | `updateAccount()` | `updateAccountDetails(accountNo, name, address, contact)` and console `accountUpdate()` |
+  | `deposit(accountNo, amount)`, `withdraw(accountNo, amount)` | Same, amount in paise; plus `depositMoney()`, `withdrawMoney()` |
+  | `getBalance(accountNo)` | No separate function: console flow `balanceEnquiry()` reads storage directly |
+  | `getMiniStatement(accountNo)` | No separate function: console flow `miniStatement()` reads storage directly |
+  | `loadAccounts()`, `saveAccount(account)`, `saveTransaction(txn)` | Same; plus `loadTransactions(transactions)` |
+  | (none) | `runMainMenu()` (D-8) |
+
+- **Fixed:** `account_update.cpp` (FR-8) included `account_search.h` (FR-7) but used nothing
+  from it. It was the only feature that included another feature's header, so the include was
+  removed; FR-8 still builds and its tests pass unchanged.
+- **Known debt, not changed:** small input helpers (`trim`, `parseAccountNumber`, `formatRupees`
+  and others) are copied into several modules instead of shared (README Module map). This keeps
+  modules independent, as NFR-4 asks, at the cost of duplicate code.
+- **To close:** in the next SAD revision, update the §4.2 table with the names above (and decide
+  whether `getBalance` / `getMiniStatement` should become separate functions).

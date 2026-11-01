@@ -20,6 +20,7 @@ Console C++ application (C++17). See the SRS, Test Plan and SAD PDFs for require
 | NFR-5 build on target OS (`build_and_test.ps1`, CI) | Implemented; `bank.exe` links and is built by CI on both runners (DEVIATIONS.md D-1, closed) |
 | SEC-2 customer access control | Met; verified by `tests_sec2.cpp` with the real `auth.cpp` and storage (Test Plan TC-13) |
 | SEC-3 failed login denies the operation | Met; verified by `tests_sec3.cpp` through the real menus (Test Plan TC-12, TC-13; see DEVIATIONS.md D-10) |
+| NFR-4 modular code structure | Met; see Module map. Checked by `tests_nfr4.cpp` and the header check in `build_and_test.ps1` (DEVIATIONS.md D-11) |
 | SEC-4 positive transaction amounts (`transactions.cpp`) | Implemented (already in FR-3 / FR-4); verified by `tests_sec4.cpp` |
 | NFR-1 2-second response time | Met; verified by `tests_nfr1.cpp` (see Performance results and DEVIATIONS.md D-6) |
 | NFR-3 invalid input changes nothing | Met after FR-8 / FR-9 fixes; verified by `tests_nfr3.cpp` (see DEVIATIONS.md D-7) |
@@ -106,6 +107,8 @@ Each test suite uses its own test doubles:
 - **`tests_sec3.cpp` (SEC-3)** has **no test doubles** either: it is the `bank.exe` file list with
   itself in place of `main.cpp`, so it must **never** be linked with a file that fakes login,
   storage or a feature. It works only inside a temporary folder it creates and deletes.
+- **`tests_nfr4.cpp` (NFR-4)** is built **alone**: it includes the headers but links no module,
+  and reads the source files, so run it from the repository root.
 - Build the active suites **separately**, each from its source-file list:
   - FR-1: `tests.cpp account.cpp`
   - FR-2: `tests_fr2.cpp account.cpp account_number.cpp`
@@ -123,6 +126,7 @@ Each test suite uses its own test doubles:
   - NFR-5: `tests_nfr5.cpp menu.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
   - SEC-2: `tests_sec2.cpp auth.cpp storage.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp`
   - SEC-3: `tests_sec3.cpp menu.cpp auth.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
+  - NFR-4: `tests_nfr4.cpp` (nothing else)
 
   Linking test files together fails, because each defines `main()` and the same fakes.
 - Never build every `.cpp` file together (for example an IDE "build all" or a `*.cpp` glob):
@@ -176,6 +180,58 @@ Covers Test Plan TC-04 and §5.1 step 6 for both deposit and withdrawal: amounts
 ` 0 `, `-0`, `-0.00`, `-0.01`, `-1`, `-500` typed at the console. Each must be rejected with an
 error, leave the balance and stored record unchanged, save nothing and record no transaction.
 Four control checks confirm that the smallest positive amount (Rs. 0.01) is accepted.
+
+## Module map (NFR-4)
+Each major feature is its own module: one header (its interface) and one source file. The
+layers follow SAD §2.1: Presentation -> Service / Business -> Persistence.
+
+| Requirement | SAD component | Interface | Source | Public functions |
+|---|---|---|---|---|
+| Console UI (NFR-2) | Console UI | `menu.h` | `menu.cpp`, `main.cpp` | `runMainMenu()`; `main()` only calls it |
+| FR-10 / FR-11 login | Authentication | `auth.h` | `auth.cpp` | `loginEmployee()`, `isEmployeeAuthenticated()`, `authenticateCustomer(accountNo, pin)` |
+| FR-1 create account | Account Management | `account.h` | `account.cpp` | `createAccountWithDetails(...)`, `createAccount()` |
+| FR-2 account numbers | Account Management | `account.h` | `account_number.cpp` | `generateAccountNumber(existing)` |
+| FR-3 / FR-4 deposit, withdrawal | Transaction Management | `transactions.h` | `transactions.cpp` | `deposit(accountNo, paise)`, `depositMoney()`, `withdraw(accountNo, paise)`, `withdrawMoney()` |
+| FR-5 balance enquiry | Transaction Management | `balance_enquiry.h` | `balance_enquiry.cpp` | `balanceEnquiry()` |
+| FR-6 mini-statement | Transaction Log | `mini_statement.h` | `mini_statement.cpp` | `miniStatement()` |
+| FR-7 search account | Account Management | `account_search.h` | `account_search.cpp` | `searchAccount(accountNo)`, `accountSearch()` |
+| FR-8 update account | Account Management | `account_update.h` | `account_update.cpp` | `updateAccountDetails(...)`, `accountUpdate()` |
+| FR-9 close account | Account Management | `account_closure.h` | `account_closure.cpp` | `closeAccount(accountNo)`, `accountClosure()` |
+| FR-13 storage | File Storage / Transaction Log | `storage.h` | `storage.cpp` | `loadAccounts`, `saveAccount`, `loadTransactions`, `saveTransaction` |
+| Shared data | (SAD §4.1) | `models.h` | none | `Account`, `Transaction`, `Employee`, status values |
+
+Dependency rules (checked by `tests_nfr4.cpp` on every build):
+- Headers include at most `models.h`; `menu.h` and `auth.h` include no project header.
+- `main.cpp` includes only `menu.h`. `menu.cpp` may call login and every feature, never storage.
+- A feature `.cpp` includes its own header, `models.h`, `auth.h` and `storage.h`, and **never
+  another feature's header**, so each feature can be changed on its own.
+- `storage.cpp` includes only `storage.h` / `models.h`; nothing below it depends upward.
+- Each test suite links only the modules it tests, with its own fakes for the rest; this works
+  only because the modules are separate.
+
+Known debt, left as it is so the owners' files stay unchanged: small input helpers are
+copied into several modules instead of shared: `trim` (6 files), `parseAccountNumber` (6),
+`formatRupees` (5), `isDigits` (4), `parseRupees` (2), `isValidName` (2). A shared helper module
+would remove the copies, but every module and most test build lists would change.
+
+## Build and run NFR-4 modular-structure tests (links no module)
+    cl /std:c++17 /EHsc /W4 tests_nfr4.cpp /Fe:tests_nfr4.exe
+    .\tests_nfr4.exe
+
+g++ equivalent: `g++ -std=c++17 -Wall -Wextra -o tests_nfr4.exe tests_nfr4.cpp` (works with g++ 6.3).
+Run it from the repository root. It checks:
+- **Interfaces:** 23 `static_assert`s compare every public module function with the signature
+  above. A mismatch stops the build. Nothing is called, so nothing needs to be linked.
+- **Module map:** each row of the table has its header and source file, and both name its
+  functions.
+- **Dependencies:** the `#include "..."` lines of all 23 production `.h` / `.cpp` files follow the
+  rules above, and none includes a `.cpp` or test file. The test only checks the files in its
+  table: add any new production file to the table in `tests_nfr4.cpp` so its dependencies are
+  checked too.
+
+`build_and_test.ps1` also compiles every `.h` on its own, included twice (syntax check only), to
+prove each header includes what it needs and has a working include guard (summary row
+`headers`).
 
 ## Build and run SEC-3 failed-authentication tests (whole program, no test doubles)
     cl /std:c++17 /EHsc /W4 tests_sec3.cpp menu.cpp auth.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp /Fe:tests_sec3.exe
@@ -334,7 +390,7 @@ Data: 500 accounts (`accounts.txt` 36799 bytes), 10000 transactions (`transactio
   are printed in the job log and vary with runner load.
 
 ## Verification status
-Latest run on 2026-11-01 with `build_and_test.ps1`, during SEC-3 work, on Windows 11 with
+Latest run on 2026-11-01 with `build_and_test.ps1`, during NFR-4 work, on Windows 11 with
 MSVC 2022 19.41 (`/std:c++17 /EHsc /W4`) and MinGW g++ 6.3.0 (`-Wall -Wextra`):
 
 | Suite | MSVC 2022 | g++ 6.3.0 |
@@ -356,6 +412,8 @@ MSVC 2022 19.41 (`/std:c++17 /EHsc /W4`) and MinGW g++ 6.3.0 (`-Wall -Wextra`):
 | NFR-5 `tests_nfr5.cpp` | 12 passed, 0 failed | Skipped: needs g++ 8+ |
 | SEC-2 `tests_sec2.cpp` | 44 passed, 0 failed | Skipped: needs g++ 8+ |
 | SEC-3 `tests_sec3.cpp` | 35 passed, 0 failed | Skipped: needs g++ 8+ |
+| NFR-4 `tests_nfr4.cpp` | 36 passed, 0 failed | 36 passed, 0 failed |
+| NFR-4 header check | all 11 headers compile alone | all 11 headers compile alone |
 | `bank.exe` | Linked (not run: interactive) | Skipped: needs g++ 8+ |
 
 CI (`windows-latest` MSVC, `ubuntu-latest` g++) runs the same script on every pull request.
@@ -463,7 +521,7 @@ the expected records in `data/`.
 ## Open points for team discussion
 - `Transaction` has no resulting-balance field; FR-6 mini-statements may want one.
 - `transactions.cpp` copies FR-1's money parsing/formatting helpers; a shared helper would
-  remove the duplication.
+  remove the duplication. The same is true for several other modules; see Module map (NFR-4).
 - A combined storage call for account + transaction would make deposits (and FR-4
   withdrawals) atomic.
 - NFR-1 headroom: deposit and withdrawal time grows with `transactions.txt`, because
