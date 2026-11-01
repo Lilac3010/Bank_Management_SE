@@ -12,15 +12,16 @@ Console C++ application (C++17). See the SRS, Test Plan and SAD PDFs for require
 | FR-5 balance enquiry (`balance_enquiry.cpp`) | Implemented |
 | FR-6 mini-statement (`mini_statement.cpp`) | Implemented |
 | FR-7 employee account search (`account_search.cpp`) | Implemented; Employee Menu option 2 |
-| FR-8 update account details (`account_update.cpp`) | Implemented; Employee Menu option 3. Input checks tightened in NFR-3 (DEVIATIONS.md D-7) |
-| FR-9 close account (`account_closure.cpp`) | Implemented; Employee Menu option 4. Input checks tightened in NFR-3 (DEVIATIONS.md D-7) |
-| Console menus (`menu.cpp`, `main.cpp`) | Main menu and Employee Menu in `runMainMenu()`; `main()` only calls it |
+| FR-8 update account details (`account_update.cpp`) | Implemented; Employee Menu option 3. Input checks tightened in NFR-3 (DEVIATIONS.md D-7); wording aligned in NFR-2 (D-9) |
+| FR-9 close account (`account_closure.cpp`) | Implemented; Employee Menu option 4. Input checks tightened in NFR-3 (DEVIATIONS.md D-7); wording aligned in NFR-2 (D-9) |
+| Console menus (`menu.cpp`, `main.cpp`) | Main menu and Employee Menu in `runMainMenu()`; `main()` only calls it (DEVIATIONS.md D-8) |
 | FR-13 storage (`storage.cpp`) | Implemented (see Data storage) |
 | FR-10 / FR-11 auth (`auth.h`) | Interface only: no `auth.cpp` yet, so `bank.exe` cannot link |
 | NFR-5 build on target OS (`build_and_test.ps1`, CI) | Implemented; `bank.exe` link waits for `auth.cpp` (see DEVIATIONS.md D-1) |
 | SEC-4 positive transaction amounts (`transactions.cpp`) | Implemented (already in FR-3 / FR-4); verified by `tests_sec4.cpp` |
 | NFR-1 2-second response time | Met; verified by `tests_nfr1.cpp` (see Performance results and DEVIATIONS.md D-6) |
 | NFR-3 invalid input changes nothing | Met after FR-8 / FR-9 fixes; verified by `tests_nfr3.cpp` (see DEVIATIONS.md D-7) |
+| NFR-2 numbered menu-driven interface | Met; verified by `tests_nfr2.cpp` and the TC-17 checklist (manual walk-through waits for `bank.exe`) |
 
 ## Build and run all test suites (NFR-5)
 `build_and_test.ps1` builds every active suite **separately** (each from its own file list
@@ -92,6 +93,10 @@ Each test suite uses its own test doubles:
   console flows with the **real** `storage.cpp`; only login (`loginEmployee`,
   `isEmployeeAuthenticated`, `authenticateCustomer`) is faked. It works only inside a temporary
   folder it creates and deletes.
+- **`tests_nfr2.cpp` (NFR-2)** uses the **real** menus (`menu.cpp`) and the **real** FR-8 / FR-9
+  screens (`account_update.cpp`, `account_closure.cpp`). The other six features (create, search,
+  deposit, withdraw, balance, mini-statement), login and storage are fakes that count calls, so
+  it must **never** be linked with those features' `.cpp` files or `storage.cpp`.
 - Build the active suites **separately**, each from its source-file list:
   - FR-1: `tests.cpp account.cpp`
   - FR-2: `tests_fr2.cpp account.cpp account_number.cpp`
@@ -103,6 +108,7 @@ Each test suite uses its own test doubles:
   - FR-9: `tests_fr9.cpp account_closure.cpp`
   - FR-13: `tests_fr13.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp`
   - SEC-4: `tests_sec4.cpp transactions.cpp`
+  - NFR-2: `tests_nfr2.cpp menu.cpp account_update.cpp account_closure.cpp`
   - NFR-1: `tests_nfr1.cpp storage.cpp transactions.cpp balance_enquiry.cpp`
   - NFR-3: `tests_nfr3.cpp menu.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
   - NFR-5: `tests_nfr5.cpp menu.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
@@ -159,6 +165,54 @@ Covers Test Plan TC-04 and §5.1 step 6 for both deposit and withdrawal: amounts
 ` 0 `, `-0`, `-0.00`, `-0.01`, `-1`, `-500` typed at the console. Each must be rejected with an
 error, leave the balance and stored record unchanged, save nothing and record no transaction.
 Four control checks confirm that the smallest positive amount (Rs. 0.01) is accepted.
+
+## Build and run NFR-2 menu and message-style tests (features, login and storage are test doubles)
+    cl /std:c++17 /EHsc /W4 tests_nfr2.cpp menu.cpp account_update.cpp account_closure.cpp /Fe:tests_nfr2.exe
+    .\tests_nfr2.exe
+
+g++ equivalent: `g++ -std=c++17 -Wall -Wextra -o tests_nfr2.exe tests_nfr2.cpp menu.cpp account_update.cpp account_closure.cpp`
+(no `<filesystem>` needed, so this also works with g++ 6.3).
+
+Covers Test Plan TC-17 (automated part) by typing scripted input into `runMainMenu()`:
+- both menus show a title and options numbered 1, 2, ... with 0 last, unchanged from before,
+  each followed by `Enter choice: `;
+- invalid choices (letters, out of range, empty, `" 1"`, `1.0`, `00`) show
+  `Invalid choice. Please try again.`, run nothing and show the menu again;
+- 0 exits the main menu or goes back from the Employee Menu; end of input returns;
+- every option runs exactly the right feature, then the menu is shown again; a failed employee
+  login does not open the Employee Menu;
+- the FR-8 / FR-9 screens start with `--- Update Account ---` / `--- Close Account ---`, ask for
+  `Account number: `, and every message uses the shared style (next section).
+
+## Console usability review (NFR-2, Test Plan TC-17)
+Style rules shared by every screen:
+- Menus: `=== Title ===`, options `1. ...` to `n. ...`, then `0. Exit` / `0. Back to Main Menu`,
+  then `Enter choice: `. Anything else: `Invalid choice. Please try again.` and the menu again.
+- Feature screens start with `--- Title ---` and ask one thing per prompt, saying the format
+  where it matters (`Contact number (10 digits)`, `Deposit amount (Rs.)`, `PIN (4 digits)`).
+- Failures start with `Error: ` (bad input or a rule), `Access denied: ` (login) or
+  `Storage error: ` (files), and say what was wrong. Successes say what happened and show the
+  result (new account number, new balance).
+
+TC-17 checklist (status on 2026-11-01):
+
+| # | Check | How verified | Result |
+|---|---|---|---|
+| 1 | Every menu has a title and numbered options with 0 last | `tests_nfr2.cpp` | Pass |
+| 2 | Same options and numbers as the SRS feature list (5 customer / login, 4 employee) | `tests_nfr2.cpp` | Pass |
+| 3 | Invalid menu choice gives a clear message and the menu again | `tests_nfr2.cpp`, `tests_nfr3.cpp` | Pass |
+| 4 | Each option opens the right feature; 0 goes back / exits | `tests_nfr2.cpp` | Pass |
+| 5 | Every feature screen starts with a `--- Title ---` line | Code review of all 8 flows; FR-8 / FR-9 by `tests_nfr2.cpp` | Pass (FR-8 / FR-9 fixed in NFR-2) |
+| 6 | Failure messages use `Error: ` / `Access denied: ` / `Storage error: ` | FR-8 / FR-9 by `tests_nfr2.cpp`; others by their own suites and `tests_nfr3.cpp` | Pass (FR-8 / FR-9 fixed in NFR-2) |
+| 7 | The PIN is never shown | `tests_fr7.cpp` | Pass |
+| 8 | A person outside the team completes every menu flow without help | Manual walk-through of `bank.exe` | **Not run**: `bank.exe` cannot link until `auth.cpp` exists (DEVIATIONS.md D-1) |
+
+Known usability points, left for the feature owners because they change behaviour, not wording:
+- Close Account closes immediately; there is no "Are you sure?" step.
+- A negative amount such as `-500` gets "must be an amount like 1000 or 1000.50" rather than
+  saying it must be positive (it is still rejected; SEC-4).
+- A failed employee login prints only `Returning to main menu.`; the error message itself will
+  come from `loginEmployee()` in `auth.cpp`.
 
 ## Build and run NFR-3 invalid-input tests (real menus and storage; login is a test double)
     cl /std:c++17 /EHsc /W4 tests_nfr3.cpp menu.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp /Fe:tests_nfr3.exe
@@ -219,7 +273,7 @@ Data: 500 accounts (`accounts.txt` 36799 bytes), 10000 transactions (`transactio
   are printed in the job log and vary with runner load.
 
 ## Verification status
-Latest run on 2026-11-01 with `build_and_test.ps1`, during NFR-3 work, on Windows 11 with
+Latest run on 2026-11-01 with `build_and_test.ps1`, during NFR-2 work, on Windows 11 with
 MSVC 2022 19.41 (`/std:c++17 /EHsc /W4`) and MinGW g++ 6.3.0 (`-Wall -Wextra`):
 
 | Suite | MSVC 2022 | g++ 6.3.0 |
@@ -234,6 +288,7 @@ MSVC 2022 19.41 (`/std:c++17 /EHsc /W4`) and MinGW g++ 6.3.0 (`-Wall -Wextra`):
 | FR-8 `tests_fr8.cpp` | all 9 test cases passed | all 9 test cases passed |
 | FR-9 `tests_fr9.cpp` | all 5 test cases passed | all 5 test cases passed |
 | SEC-4 `tests_sec4.cpp` | 34 passed, 0 failed | 34 passed, 0 failed |
+| NFR-2 `tests_nfr2.cpp` | 57 passed, 0 failed | 57 passed, 0 failed |
 | FR-13 `tests_fr13.cpp` | 58 passed, 0 failed (plus 12 checks inside the two restart processes, all passed) | Skipped: needs g++ 8+ |
 | NFR-1 `tests_nfr1.cpp` | 9 passed, 0 failed (timings in Performance results) | Skipped: needs g++ 8+ |
 | NFR-3 `tests_nfr3.cpp` | 95 passed, 0 failed | Skipped: needs g++ 8+ |

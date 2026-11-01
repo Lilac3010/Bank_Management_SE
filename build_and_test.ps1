@@ -30,6 +30,7 @@ $suites = @(
     @{ Name = 'tests_fr8';  Req = 'FR-8';  NeedsFs = $false; Sources = @('tests_fr8.cpp', 'account_update.cpp') },
     @{ Name = 'tests_fr9';  Req = 'FR-9';  NeedsFs = $false; Sources = @('tests_fr9.cpp', 'account_closure.cpp') },
     @{ Name = 'tests_sec4'; Req = 'SEC-4'; NeedsFs = $false; Sources = @('tests_sec4.cpp', 'transactions.cpp') },
+    @{ Name = 'tests_nfr2'; Req = 'NFR-2'; NeedsFs = $false; Sources = @('tests_nfr2.cpp', 'menu.cpp', 'account_update.cpp', 'account_closure.cpp') },
     @{ Name = 'tests_fr13'; Req = 'FR-13'; NeedsFs = $true;  Sources = @('tests_fr13.cpp', 'storage.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp') },
     @{ Name = 'tests_nfr1'; Req = 'NFR-1'; NeedsFs = $true;  Sources = @('tests_nfr1.cpp', 'storage.cpp', 'transactions.cpp', 'balance_enquiry.cpp') },
     @{ Name = 'tests_nfr3'; Req = 'NFR-3'; NeedsFs = $true;  Sources = @('tests_nfr3.cpp', 'menu.cpp', 'storage.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp', 'account_search.cpp', 'account_update.cpp', 'account_closure.cpp') },

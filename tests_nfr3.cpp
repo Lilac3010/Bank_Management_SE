@@ -63,7 +63,6 @@ const std::chrono::seconds MENU_TIME_LIMIT(5);
 const std::string INVALID_CHOICE = "Invalid choice";
 const std::string INVALID_ACCOUNT_NUMBER = "Error: Account number must be a positive whole number.";
 const std::string ACCESS_DENIED = "Access denied: invalid account number or PIN.";
-const std::string UPDATE_CLOSE_INVALID_NUMBER = "Invalid account number.";
 const std::string NO_MESSAGE_NEEDED = "";   // end of input: nobody is left to read a message
 
 // Text that appears only when an operation succeeds.
@@ -230,9 +229,9 @@ void testUpdate() {
     const std::string newDetails = "Asha Changed\n9 New Road, Hubballi\n9000000009\n";
     for (const char* number : BAD_ACCOUNT_NUMBERS)
         expectRejected("Update: account number " + quoted(number),
-                       start + number + "\n" + newDetails, UPDATE_CLOSE_INVALID_NUMBER);
+                       start + number + "\n" + newDetails, INVALID_ACCOUNT_NUMBER);
     expectRejected("Update: end of input before the account number", start,
-                   UPDATE_CLOSE_INVALID_NUMBER);
+                   INVALID_ACCOUNT_NUMBER);
 
     const std::string account = start + "100001\n";
     expectRejected("Update: name of only spaces",
@@ -254,8 +253,8 @@ void testClose() {
     const std::string start = "1\n4\n";   // Employee Login, then Close Account
     for (const char* number : BAD_ACCOUNT_NUMBERS)
         expectRejected("Close: account number " + quoted(number),
-                       start + number + "\n", UPDATE_CLOSE_INVALID_NUMBER);
-    expectRejected("Close: end of input", start, UPDATE_CLOSE_INVALID_NUMBER);
+                       start + number + "\n", INVALID_ACCOUNT_NUMBER);
+    expectRejected("Close: end of input", start, INVALID_ACCOUNT_NUMBER);
 }
 
 // Deposit (main menu 2) and withdrawal (main menu 3) share the same input rules.
