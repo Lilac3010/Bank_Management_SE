@@ -113,3 +113,47 @@ we did, and what would close the gap.
 - **Not a gap:** at end of input (Ctrl+Z / Ctrl+D) some flows return without a message, because
   nobody is left to read it. `tests_nfr3.cpp` still checks that nothing changed and that the
   program returns.
+
+## D-8 NFR-2 / NFR-4: menus moved from `main.cpp` to `menu.cpp` (SAD update needed)
+
+- **Documents:** SAD §2.3 names a "Console UI" component ("Displays menus, reads input,
+  validates basic format and displays results"), but SAD §4.2 (internal module interfaces) and
+  §2.5 / §7 (traceability) list no console-UI function or file. The implementation first had the
+  menus inside `main.cpp`.
+- **What we did:** the main menu and the Employee Menu moved, unchanged, into `menu.cpp` with one
+  public function, `void runMainMenu()` (`menu.h`); `main()` only calls it. The Employee Menu stays
+  a private function in `menu.cpp` and is reached through main menu option 1. The move was made in
+  the NFR-3 pull request (#39) so the menus could be tested without `main()`; NFR-2 relies on it
+  for `tests_nfr2.cpp`. Every `bank.exe` build list now includes `menu.cpp`.
+- **To close:** in the next SAD revision, add `runMainMenu()` (`menu.cpp`) to the §4.2 interface
+  table as the Console UI interface, and map it to FR-12 / NFR-2 in §2.5 and §7.
+
+## D-9 NFR-2: FR-8 / FR-9 screen wording aligned with the other features
+
+- **Documents:** SRS NFR-2: "numbered, menu-driven console interface with clear prompts and
+  messages"; SRS §4.1 and Test Plan TC-17. The SRS and SAD do not fix exact wording.
+- **What was different:** the FR-8 (update) and FR-9 (close) screens had no `--- Title ---` line,
+  asked "Enter account number to update/close:", and their messages had no `Error: ` /
+  `Storage error: ` prefix and used other wording than FR-1 to FR-7 for the same situations.
+- **What changed** (text only; no checks, order or behaviour changed):
+
+  | Situation | Before | After |
+  |---|---|---|
+  | Screen start | (none) | `--- Update Account ---` / `--- Close Account ---` |
+  | Account-number prompt | `Enter account number to update: ` / `... to close: ` | `Account number: ` |
+  | Not logged in | `Access denied. Employee login required.` | `Access denied: employee login required.` |
+  | Bad account number | `Invalid account number.` | `Error: Account number must be a positive whole number.` |
+  | Data cannot be read | `Unable to load account records.` | `Storage error: could not read account data.` |
+  | Unknown account | `Account not found.` | `Error: Account not found.` |
+  | Update: closed account | `Cannot update a closed account.` | `Error: Cannot update a closed account.` |
+  | Update: bad name / address / contact | `Invalid name. ...` / `Invalid address.` / `Contact number must ...` | Same text with `Error: ` in front |
+  | Update: contact in use | `Contact number is already used by another active account.` | Same text with `Error: ` in front |
+  | Update: save fails | `Failed to save account updates.` | `Storage error: account details were not updated.` |
+  | Close: already closed / other status | `Account is already closed.` / `Account has an invalid status.` | Same text with `Error: ` in front |
+  | Close: save fails | `Failed to save account closure.` | `Storage error: account was not closed.` |
+  | Successes | `Account details updated successfully.` / `Account closed successfully.` | Unchanged |
+
+- **Tests affected:** `tests_fr8.cpp` and `tests_fr9.cpp` check only success / failure, not
+  wording, and pass unchanged. `tests_nfr3.cpp` expected the old `Invalid account number.` for
+  its 20 update / close account-number cases; they now expect the shared message. Nothing else
+  in that suite changed.

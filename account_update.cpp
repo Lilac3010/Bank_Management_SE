@@ -100,7 +100,7 @@ UpdateAccountResult updateAccountDetails(int accountNo,
                                          const std::string& address,
                                          const std::string& contactNumber) {
     if (accountNo <= 0) {
-        return {false, "Invalid account number."};
+        return {false, "Error: Account number must be a positive whole number."};
     }
 
     // Same rules as FR-1 account creation: surrounding spaces are ignored, so a value
@@ -110,21 +110,21 @@ UpdateAccountResult updateAccountDetails(int accountNo,
     const std::string newContactNumber = trim(contactNumber);
 
     if (!isValidName(newName)) {
-        return {false, "Invalid name. Use letters, spaces, dots or apostrophes."};
+        return {false, "Error: Invalid name. Use letters, spaces, dots or apostrophes."};
     }
 
     if (newAddress.empty() || newAddress.find('|') != std::string::npos) {
-        return {false, "Invalid address."};
+        return {false, "Error: Invalid address."};
     }
 
     if (!isValidContactNumber(newContactNumber)) {
-        return {false, "Contact number must contain exactly 10 digits."};
+        return {false, "Error: Contact number must contain exactly 10 digits."};
     }
 
     std::vector<Account> accounts;
 
     if (!loadAccounts(accounts)) {
-        return {false, "Unable to load account records."};
+        return {false, "Storage error: could not read account data."};
     }
 
     Account* targetAccount = nullptr;
@@ -137,15 +137,15 @@ UpdateAccountResult updateAccountDetails(int accountNo,
     }
 
     if (targetAccount == nullptr) {
-        return {false, "Account not found."};
+        return {false, "Error: Account not found."};
     }
 
     if (targetAccount->status != "ACTIVE") {
-        return {false, "Cannot update a closed account."};
+        return {false, "Error: Cannot update a closed account."};
     }
 
     if (isContactNumberInUse(accounts, accountNo, newContactNumber)) {
-        return {false, "Contact number is already used by another active account."};
+        return {false, "Error: Contact number is already used by another active account."};
     }
 
     // Update only the permitted customer details.
@@ -155,7 +155,7 @@ UpdateAccountResult updateAccountDetails(int accountNo,
     targetAccount->contactNumber = newContactNumber;
 
     if (!saveAccount(*targetAccount)) {
-        return {false, "Failed to save account updates."};
+        return {false, "Storage error: account details were not updated."};
     }
 
     return {true, "Account details updated successfully."};
@@ -163,25 +163,26 @@ UpdateAccountResult updateAccountDetails(int accountNo,
 
 bool accountUpdate() {
     if (!isEmployeeAuthenticated()) {
-        std::cout << "Access denied. Employee login required.\n";
+        std::cout << "Access denied: employee login required.\n";
         return false;
     }
 
     std::string accountText;
     int accountNo = 0;
-    std::cout << "Enter account number to update: ";
+    std::cout << "\n--- Update Account ---\n";
+    std::cout << "Account number: ";
 
     // Read the whole line so input such as "100001abc" is rejected, not read as 100001.
     if (!std::getline(std::cin, accountText) ||
         !parseAccountNumber(accountText, accountNo)) {
-        std::cout << "Invalid account number.\n";
+        std::cout << "Error: Account number must be a positive whole number.\n";
         return false;
     }
 
     std::vector<Account> accounts;
 
     if (!loadAccounts(accounts)) {
-        std::cout << "Unable to load account records.\n";
+        std::cout << "Storage error: could not read account data.\n";
         return false;
     }
 
@@ -190,7 +191,7 @@ bool accountUpdate() {
     for (const Account& account : accounts) {
         if (account.accountNumber == accountNo) {
             if (account.status != "ACTIVE") {
-                std::cout << "Cannot update a closed account.\n";
+                std::cout << "Error: Cannot update a closed account.\n";
                 return false;
             }
 
@@ -204,7 +205,7 @@ bool accountUpdate() {
     }
 
     if (!found) {
-        std::cout << "Account not found.\n";
+        std::cout << "Error: Account not found.\n";
         return false;
     }
 

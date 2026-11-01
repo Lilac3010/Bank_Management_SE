@@ -45,13 +45,13 @@ bool parseAccountNumber(const std::string& text, int& accountNo) {
 
 AccountClosureResult closeAccount(int accountNo) {
     if (accountNo <= 0) {
-        return {false, "Invalid account number."};
+        return {false, "Error: Account number must be a positive whole number."};
     }
 
     std::vector<Account> accounts;
 
     if (!loadAccounts(accounts)) {
-        return {false, "Unable to load account records."};
+        return {false, "Storage error: could not read account data."};
     }
 
     Account* targetAccount = nullptr;
@@ -64,22 +64,22 @@ AccountClosureResult closeAccount(int accountNo) {
     }
 
     if (targetAccount == nullptr) {
-        return {false, "Account not found."};
+        return {false, "Error: Account not found."};
     }
 
     if (targetAccount->status == STATUS_CLOSED) {
-        return {false, "Account is already closed."};
+        return {false, "Error: Account is already closed."};
     }
 
     if (targetAccount->status != STATUS_ACTIVE) {
-        return {false, "Account has an invalid status."};
+        return {false, "Error: Account has an invalid status."};
     }
 
     // Preserve the account record and history; mark it as closed.
     targetAccount->status = STATUS_CLOSED;
 
     if (!saveAccount(*targetAccount)) {
-        return {false, "Failed to save account closure."};
+        return {false, "Storage error: account was not closed."};
     }
 
     return {true, "Account closed successfully."};
@@ -87,19 +87,20 @@ AccountClosureResult closeAccount(int accountNo) {
 
 bool accountClosure() {
     if (!isEmployeeAuthenticated()) {
-        std::cout << "Access denied. Employee login required.\n";
+        std::cout << "Access denied: employee login required.\n";
         return false;
     }
 
     std::string accountText;
     int accountNo = 0;
 
-    std::cout << "Enter account number to close: ";
+    std::cout << "\n--- Close Account ---\n";
+    std::cout << "Account number: ";
 
     // Read the whole line so input such as "100001abc" is rejected, not read as 100001.
     if (!std::getline(std::cin, accountText) ||
         !parseAccountNumber(accountText, accountNo)) {
-        std::cout << "Invalid account number.\n";
+        std::cout << "Error: Account number must be a positive whole number.\n";
         return false;
     }
 
