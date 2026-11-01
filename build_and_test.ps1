@@ -29,6 +29,7 @@ $suites = @(
     @{ Name = 'tests_fr7';  Req = 'FR-7';  NeedsFs = $false; Sources = @('tests_fr7.cpp', 'account_search.cpp') },
     @{ Name = 'tests_fr8';  Req = 'FR-8';  NeedsFs = $false; Sources = @('tests_fr8.cpp', 'account_update.cpp') },
     @{ Name = 'tests_fr9';  Req = 'FR-9';  NeedsFs = $false; Sources = @('tests_fr9.cpp', 'account_closure.cpp') },
+    @{ Name = 'tests_sec4'; Req = 'SEC-4'; NeedsFs = $false; Sources = @('tests_sec4.cpp', 'transactions.cpp') },
     @{ Name = 'tests_fr13'; Req = 'FR-13'; NeedsFs = $true;  Sources = @('tests_fr13.cpp', 'storage.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp') },
     @{ Name = 'tests_nfr5'; Req = 'NFR-5'; NeedsFs = $true;  Sources = @('tests_nfr5.cpp', 'storage.cpp', 'account.cpp', 'account_number.cpp', 'transactions.cpp', 'balance_enquiry.cpp', 'mini_statement.cpp', 'account_search.cpp', 'account_update.cpp', 'account_closure.cpp') }
 )
