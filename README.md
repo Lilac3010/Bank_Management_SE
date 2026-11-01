@@ -12,8 +12,35 @@ Console C++ application (C++17). See the SRS, Test Plan and SAD PDFs for require
 | FR-5 balance enquiry (`balance_enquiry.cpp`) | Implemented |
 | FR-6 mini-statement (`mini_statement.cpp`) | Implemented |
 | FR-7 employee account search (`account_search.cpp`) | Implemented; Employee Menu option 2 |
+| FR-8 update account details (`account_update.cpp`) | Implemented; Employee Menu option 3 |
+| FR-9 close account (`account_closure.cpp`) | Implemented; Employee Menu option 4 |
 | FR-13 storage (`storage.cpp`) | Implemented (see Data storage) |
 | FR-10 / FR-11 auth (`auth.h`) | Interface only: no `auth.cpp` yet, so `bank.exe` cannot link |
+| NFR-5 build on target OS (`build_and_test.ps1`, CI) | Implemented; `bank.exe` link waits for `auth.cpp` (see DEVIATIONS.md D-1) |
+
+## Build and run all test suites (NFR-5)
+`build_and_test.ps1` builds every active suite **separately** (each from its own file list
+below), runs it, compiles every `bank.exe` source, and prints a summary. It exits with 0 only
+if nothing failed.
+
+    powershell -ExecutionPolicy Bypass -File build_and_test.ps1             # Windows
+    pwsh ./build_and_test.ps1 -Compiler gcc                                  # Linux / macOS
+
+- `-Compiler auto` (default) uses MSVC on Windows when it is installed (found automatically,
+  no Developer prompt needed), otherwise g++. `-Compiler msvc` or `-Compiler gcc` forces one.
+- Programs and object files go to `build/<compiler>/`, which git ignores.
+- **Compiler versions:** C++17 with `<filesystem>` is needed for `storage.cpp`, so use
+  **MSVC 2019+ or g++ 8+**. With an older g++ (for example MinGW g++ 6.3.0) the suites that use
+  `storage.cpp` (FR-13, NFR-5) and the `bank.exe` compile are **skipped** with a message; the
+  other suites still build and run.
+- `bank.exe` is compiled but not linked while `auth.cpp` is missing. Once `auth.cpp` exists the
+  script links `bank.exe` as well, with no change needed.
+- MSVC `/W4` reports warning C4996 (`localtime`) in `transactions.cpp`. It is a warning only and
+  is left unchanged (see DEVIATIONS.md D-2).
+
+**CI:** `.github/workflows/build-and-test.yml` runs the same script on every push and pull
+request to `main`, on `windows-latest` (MSVC) and `ubuntu-latest` (g++). A pull request should
+only be merged when both jobs pass.
 
 ## Build and run FR-1 tests (no other modules needed)
     g++ -std=c++17 -Wall -Wextra -o tests.exe tests.cpp account.cpp
@@ -40,9 +67,16 @@ Each test suite uses its own test doubles:
 - **`tests_fr7.cpp` (FR-7)** uses the real `account_search.cpp`, with fakes for employee login
   (`isEmployeeAuthenticated`) and storage (`loadAccounts`). These tests do **not** verify FR-10,
   FR-13 or persistence across restart.
+- **`tests_fr8.cpp` (FR-8)** and **`tests_fr9.cpp` (FR-9)** use the real `account_update.cpp` /
+  `account_closure.cpp`, with fakes for login and storage (`loadAccounts`, `saveAccount`). They
+  check results with `assert()`, so build them **without** `NDEBUG` (no `/DNDEBUG`, `-DNDEBUG`
+  or release build), or the checks are silently skipped.
 - **`tests_fr13.cpp` (FR-13)** uses the **real** `storage.cpp` together with the real FR-1 to FR-6
   code. Only employee and customer login (`isEmployeeAuthenticated`, `authenticateCustomer`) are
   fakes. It works only inside a temporary folder it creates and deletes (see Data storage).
+- **`tests_nfr5.cpp` (NFR-5)** links the **real** code of every `bank.exe` module except
+  `main.cpp` and `auth.cpp`; only the three `auth.h` functions are fakes. It runs one pass
+  through FR-1 to FR-9 with real storage inside a temporary folder it creates and deletes.
 - Build the active suites **separately**, each from its source-file list:
   - FR-1: `tests.cpp account.cpp`
   - FR-2: `tests_fr2.cpp account.cpp account_number.cpp`
@@ -50,7 +84,10 @@ Each test suite uses its own test doubles:
   - FR-5: `tests_fr5.cpp balance_enquiry.cpp`
   - FR-6: `tests_fr6.cpp mini_statement.cpp`
   - FR-7: `tests_fr7.cpp account_search.cpp`
+  - FR-8: `tests_fr8.cpp account_update.cpp`
+  - FR-9: `tests_fr9.cpp account_closure.cpp`
   - FR-13: `tests_fr13.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp`
+  - NFR-5: `tests_nfr5.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
 
   Linking test files together fails, because each defines `main()` and the same fakes.
 - Never build every `.cpp` file together (for example an IDE "build all" or a `*.cpp` glob):
@@ -76,40 +113,64 @@ g++ equivalent: `g++ -std=c++17 -Wall -Wextra -o tests_fr7.exe tests_fr7.cpp acc
     cl /std:c++17 /EHsc /W4 tests_fr13.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp /Fe:tests_fr13.exe
     .\tests_fr13.exe
 
-g++ equivalent: the same file list with `g++ -std=c++17 -Wall -Wextra -o tests_fr13.exe`.
+g++ equivalent (g++ 8+ only, see NFR-5 above): the same file list with
+`g++ -std=c++17 -Wall -Wextra -o tests_fr13.exe`.
 The program prints the temporary folder it uses, and restarts itself twice as separate
 processes to check that saved data survives a restart.
 
+## Build and run FR-8 / FR-9 tests (login and storage are test doubles)
+    cl /std:c++17 /EHsc /W4 tests_fr8.cpp account_update.cpp /Fe:tests_fr8.exe
+    cl /std:c++17 /EHsc /W4 tests_fr9.cpp account_closure.cpp /Fe:tests_fr9.exe
+
+g++ equivalent: the same file lists with `g++ -std=c++17 -Wall -Wextra -o <name>.exe`.
+
+## Build and run NFR-5 link and smoke tests (real modules; login is a test double)
+    cl /std:c++17 /EHsc /W4 tests_nfr5.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp /Fe:tests_nfr5.exe
+    .\tests_nfr5.exe
+
+g++ equivalent (g++ 8+ only): the same file list with `g++ -std=c++17 -Wall -Wextra -o tests_nfr5.exe`.
+
 ## Verification status
-Latest run with MSVC 2022 (`/std:c++17 /EHsc /W4`), during FR-7 work:
+Latest run on 2026-11-01 with `build_and_test.ps1`, during NFR-5 work, on Windows 11 with
+MSVC 2022 19.41 (`/std:c++17 /EHsc /W4`) and MinGW g++ 6.3.0 (`-Wall -Wextra`):
 
-| Suite | Result |
-|---|---|
-| FR-1 `tests.cpp` | 67 passed, 0 failed |
-| FR-2 `tests_fr2.cpp` | 19 passed, 0 failed |
-| FR-3 `tests_fr3.cpp` | **Parked, not run** (see below) |
-| FR-4 `tests_fr4.cpp` | 26 passed, 0 failed |
-| FR-5 `tests_fr5.cpp` | 29 passed, 0 failed |
-| FR-6 `tests_fr6.cpp` | 19 passed, 0 failed |
-| FR-7 `tests_fr7.cpp` | 46 passed, 0 failed (also 46 / 0 with MinGW g++ 6.3.0 `-Wall -Wextra`) |
-| FR-13 `tests_fr13.cpp` | 58 passed, 0 failed (plus 12 checks inside the two restart processes, all passed) |
+| Suite | MSVC 2022 | g++ 6.3.0 |
+|---|---|---|
+| FR-1 `tests.cpp` | 67 passed, 0 failed | 67 passed, 0 failed |
+| FR-2 `tests_fr2.cpp` | 19 passed, 0 failed | 19 passed, 0 failed |
+| FR-3 `tests_fr3.cpp` | **Parked** (see below) | **Parked** |
+| FR-4 `tests_fr4.cpp` | 26 passed, 0 failed | 26 passed, 0 failed |
+| FR-5 `tests_fr5.cpp` | 29 passed, 0 failed | 29 passed, 0 failed |
+| FR-6 `tests_fr6.cpp` | 19 passed, 0 failed | 19 passed, 0 failed |
+| FR-7 `tests_fr7.cpp` | 46 passed, 0 failed | 46 passed, 0 failed |
+| FR-8 `tests_fr8.cpp` | all 9 test cases passed | all 9 test cases passed |
+| FR-9 `tests_fr9.cpp` | all 5 test cases passed | all 5 test cases passed |
+| FR-13 `tests_fr13.cpp` | 58 passed, 0 failed (plus 12 checks inside the two restart processes, all passed) | Skipped: needs g++ 8+ |
+| NFR-5 `tests_nfr5.cpp` | 12 passed, 0 failed | Skipped: needs g++ 8+ |
+| `bank.exe` sources | All compile; link skipped (no `auth.cpp`) | Skipped: needs g++ 8+ |
 
-- **FR-3 (`tests_fr3.cpp`)** is still parked: it is not compiled or run in any documented flow,
-  because its test program was blocked by Windows Smart App Control earlier. FR-3's `deposit()`
-  is, however, exercised by `tests_fr13.cpp` against real storage (successful deposits,
-  rollback when the transaction cannot be saved, and deposits after a restart).
+CI (`windows-latest` MSVC, `ubuntu-latest` g++) runs the same script on every pull request.
+
+- **FR-3 (`tests_fr3.cpp`)** is still parked: it is not part of `build_and_test.ps1`, CI or any
+  documented flow, because its test program was blocked by Windows Smart App Control earlier.
+  Un-parking it is the FR-3 owner's decision. For information: when built by hand on 2026-11-01
+  (`tests_fr3.cpp transactions.cpp`) it was not blocked and gave **42 passed, 0 failed** with both
+  MSVC 2022 and g++ 6.3.0. FR-3's `deposit()` is also exercised by `tests_fr13.cpp` against real
+  storage (successful deposits, rollback when the transaction cannot be saved, and deposits after
+  a restart).
 - Smart App Control can block any freshly built test program on this machine. A blocked run
   means "not run", not "failed".
 
 ## Build the application
-    cl /std:c++17 /EHsc /W4 main.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp storage.cpp account_search.cpp auth.cpp /Fe:bank.exe
+    cl /std:c++17 /EHsc /W4 main.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp storage.cpp account_search.cpp account_update.cpp account_closure.cpp auth.cpp /Fe:bank.exe
     .\bank.exe
 
-g++ equivalent: the same file list with `g++ -std=c++17 -Wall -Wextra -o bank.exe`.
+g++ equivalent (g++ 8+ only): the same file list with `g++ -std=c++17 -Wall -Wextra -o bank.exe`.
 
 **Not possible yet:** `auth.cpp` (FR-10 / FR-11) does not exist. Every other file compiles, but
 the link fails with exactly three unresolved symbols: `loginEmployee`, `isEmployeeAuthenticated`
-and `authenticateCustomer`.
+and `authenticateCustomer` (checked on 2026-11-01 with MSVC 2022). `build_and_test.ps1` compiles
+these files on every run and links `bank.exe` as soon as `auth.cpp` exists (DEVIATIONS.md D-1).
 
 Run `bank.exe` from the folder where you want the data kept (normally the repository root);
 see Data storage.

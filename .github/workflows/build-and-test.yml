@@ -1,0 +1,29 @@
+# NFR-5: build and run every active test suite on Windows (MSVC) and Linux (g++).
+# Each suite is built separately by build_and_test.ps1, never all .cpp files together.
+# bank.exe is compiled but not linked until auth.cpp (FR-10 / FR-11) exists; see DEVIATIONS.md.
+name: Build and test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.os }} (${{ matrix.compiler }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            compiler: msvc
+          - os: ubuntu-latest
+            compiler: gcc
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and run test suites
+        shell: pwsh
+        run: ./build_and_test.ps1 -Compiler ${{ matrix.compiler }}
