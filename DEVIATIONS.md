@@ -163,3 +163,22 @@ we did, and what would close the gap.
   wording, and pass unchanged. `tests_nfr3.cpp` expected the old `Invalid account number.` for
   its 20 update / close account-number cases; they now expect the shared message. Nothing else
   in that suite changed.
+
+## D-10 SEC-3: no attempt limit, and no explicit employee logout
+
+- **Documents:** SRS SEC-3: "Failed authentication shall deny access and display a clear error
+  message without performing the requested operation." SRS SO-1 / SEC-1 and SAD §3 ("Employee
+  login is checked before administrative menu operations"). Test Plan TC-12 and TC-13. None of
+  them asks for a lockout, an attempt limit or a logout function.
+- **What we do:** `tests_sec3.cpp` verifies SEC-3 as written: every failed employee or customer
+  login shows a clear error and performs no operation, and the Employee Menu cannot be reached
+  without a successful login. It deliberately also checks that there is **no lockout**: five
+  failed employee logins in a row do not block a later correct one.
+- **Observed, not a gap:** `auth.cpp` keeps the employee logged in after `0. Back to Main Menu`
+  until the next login attempt; a failed attempt logs them out (tested). Through the menus this
+  cannot be used to skip a login, because the Employee Menu is only reached by main-menu option 1,
+  which always asks for the username and password again. Direct calls to the employee functions
+  would still succeed in that state; a logout on leaving the Employee Menu would be the FR-10
+  owner's change.
+- **To close (optional):** if the team wants an attempt limit or logout, add it to the SRS first
+  (new SEC requirement and test case), then to `auth.cpp`.

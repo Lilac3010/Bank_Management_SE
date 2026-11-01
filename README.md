@@ -16,9 +16,10 @@ Console C++ application (C++17). See the SRS, Test Plan and SAD PDFs for require
 | FR-9 close account (`account_closure.cpp`) | Implemented; Employee Menu option 4. Input checks tightened in NFR-3 (DEVIATIONS.md D-7); wording aligned in NFR-2 (D-9) |
 | Console menus (`menu.cpp`, `main.cpp`) | Main menu and Employee Menu in `runMainMenu()`; `main()` only calls it (DEVIATIONS.md D-8) |
 | FR-13 storage (`storage.cpp`) | Implemented (see Data storage) |
-| FR-10 / FR-11 auth (`auth.cpp`) | Implemented (SEC-1, PR #41). Customer login (FR-11) verified with the real code by `tests_sec2.cpp` |
+| FR-10 / FR-11 auth (`auth.cpp`) | Implemented (SEC-1, PR #41). Verified with the real code: customer login (FR-11) by `tests_sec2.cpp`, employee login (FR-10) by `tests_sec3.cpp` |
 | NFR-5 build on target OS (`build_and_test.ps1`, CI) | Implemented; `bank.exe` links and is built by CI on both runners (DEVIATIONS.md D-1, closed) |
 | SEC-2 customer access control | Met; verified by `tests_sec2.cpp` with the real `auth.cpp` and storage (Test Plan TC-13) |
+| SEC-3 failed login denies the operation | Met; verified by `tests_sec3.cpp` through the real menus (Test Plan TC-12, TC-13; see DEVIATIONS.md D-10) |
 | SEC-4 positive transaction amounts (`transactions.cpp`) | Implemented (already in FR-3 / FR-4); verified by `tests_sec4.cpp` |
 | NFR-1 2-second response time | Met; verified by `tests_nfr1.cpp` (see Performance results and DEVIATIONS.md D-6) |
 | NFR-3 invalid input changes nothing | Met after FR-8 / FR-9 fixes; verified by `tests_nfr3.cpp` (see DEVIATIONS.md D-7) |
@@ -37,7 +38,7 @@ if nothing failed.
 - Programs and object files go to `build/<compiler>/`, which git ignores.
 - **Compiler versions:** C++17 with `<filesystem>` is needed for `storage.cpp`, so use
   **MSVC 2019+ or g++ 8+**. With an older g++ (for example MinGW g++ 6.3.0) the suites that use
-  `storage.cpp` (FR-13, NFR-1, NFR-3, NFR-5, SEC-2) and the `bank.exe` build are **skipped** with
+  `storage.cpp` (FR-13, NFR-1, NFR-3, NFR-5, SEC-2, SEC-3) and the `bank.exe` build are **skipped** with
   a message; the other suites still build and run.
 - The script also builds `bank.exe` (it is interactive, so it is not run). Since `auth.cpp` was
   added in PR #41 it links; if `auth.cpp` were missing, the script would compile the other files
@@ -102,6 +103,9 @@ Each test suite uses its own test doubles:
 - **`tests_sec2.cpp` (SEC-2)** has **no test doubles**: it uses the real `auth.cpp`, `storage.cpp`
   and the four customer flows. Because it contains the real `auth.cpp`, it must **never** be linked
   with a file that fakes login. It works only inside a temporary folder it creates and deletes.
+- **`tests_sec3.cpp` (SEC-3)** has **no test doubles** either: it is the `bank.exe` file list with
+  itself in place of `main.cpp`, so it must **never** be linked with a file that fakes login,
+  storage or a feature. It works only inside a temporary folder it creates and deletes.
 - Build the active suites **separately**, each from its source-file list:
   - FR-1: `tests.cpp account.cpp`
   - FR-2: `tests_fr2.cpp account.cpp account_number.cpp`
@@ -118,6 +122,7 @@ Each test suite uses its own test doubles:
   - NFR-3: `tests_nfr3.cpp menu.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
   - NFR-5: `tests_nfr5.cpp menu.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
   - SEC-2: `tests_sec2.cpp auth.cpp storage.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp`
+  - SEC-3: `tests_sec3.cpp menu.cpp auth.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
 
   Linking test files together fails, because each defines `main()` and the same fakes.
 - Never build every `.cpp` file together (for example an IDE "build all" or a `*.cpp` glob):
@@ -171,6 +176,31 @@ Covers Test Plan TC-04 and §5.1 step 6 for both deposit and withdrawal: amounts
 ` 0 `, `-0`, `-0.00`, `-0.01`, `-1`, `-500` typed at the console. Each must be rejected with an
 error, leave the balance and stored record unchanged, save nothing and record no transaction.
 Four control checks confirm that the smallest positive amount (Rs. 0.01) is accepted.
+
+## Build and run SEC-3 failed-authentication tests (whole program, no test doubles)
+    cl /std:c++17 /EHsc /W4 tests_sec3.cpp menu.cpp auth.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp /Fe:tests_sec3.exe
+    .\tests_sec3.exe
+
+g++ equivalent (g++ 8+ only): the same file list with `g++ -std=c++17 -Wall -Wextra -o tests_sec3.exe`.
+
+Covers SRS SEC-3 and Test Plan TC-12 and TC-13. Input is typed into the real main menu, as in
+`bank.exe`. The test repeats the demo employee credentials from `auth.cpp`; if they are changed
+there, change `USERNAME` / `PASSWORD` in `tests_sec3.cpp` too.
+- **Employee (TC-12):** wrong password, wrong username, username or password in other case, empty
+  username and password, a leading space, and input ending early. Each shows `Invalid username or
+  password.`, never shows the Employee Menu, leaves nobody logged in and saves nothing. Typing the
+  Close Account or Create Account keys after a failed login runs neither (account 100001 stays
+  ACTIVE, no account created). After a failed login, `createAccountWithDetails`, `searchAccount`,
+  `updateAccountDetails`, `closeAccount` and their four screens all answer `Access denied:
+  employee login required.` without showing a screen or saving. The correct credentials open
+  the Employee Menu; a failed login after that logs the employee out again.
+- **Customer (TC-13):** wrong PIN, unknown account and CLOSED account for deposit, withdrawal,
+  balance enquiry and mini-statement from the main menu. Each shows `Access denied: invalid
+  account number or PIN.` and never reaches the amount prompt or shows data.
+- **"No operation"** means no success output, both data files (balances, account records and the
+  transaction log) byte-for-byte unchanged, and no save at all (file timestamps untouched).
+- **No lockout:** five failed employee logins in a row do not block a later correct one. The SRS
+  does not ask for an attempt limit (DEVIATIONS.md D-10).
 
 ## Build and run SEC-2 customer access-control tests (real login and storage, no test doubles)
     cl /std:c++17 /EHsc /W4 tests_sec2.cpp auth.cpp storage.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp /Fe:tests_sec2.exe
@@ -304,7 +334,7 @@ Data: 500 accounts (`accounts.txt` 36799 bytes), 10000 transactions (`transactio
   are printed in the job log and vary with runner load.
 
 ## Verification status
-Latest run on 2026-11-01 with `build_and_test.ps1`, during SEC-2 work, on Windows 11 with
+Latest run on 2026-11-01 with `build_and_test.ps1`, during SEC-3 work, on Windows 11 with
 MSVC 2022 19.41 (`/std:c++17 /EHsc /W4`) and MinGW g++ 6.3.0 (`-Wall -Wextra`):
 
 | Suite | MSVC 2022 | g++ 6.3.0 |
@@ -325,6 +355,7 @@ MSVC 2022 19.41 (`/std:c++17 /EHsc /W4`) and MinGW g++ 6.3.0 (`-Wall -Wextra`):
 | NFR-3 `tests_nfr3.cpp` | 95 passed, 0 failed | Skipped: needs g++ 8+ |
 | NFR-5 `tests_nfr5.cpp` | 12 passed, 0 failed | Skipped: needs g++ 8+ |
 | SEC-2 `tests_sec2.cpp` | 44 passed, 0 failed | Skipped: needs g++ 8+ |
+| SEC-3 `tests_sec3.cpp` | 35 passed, 0 failed | Skipped: needs g++ 8+ |
 | `bank.exe` | Linked (not run: interactive) | Skipped: needs g++ 8+ |
 
 CI (`windows-latest` MSVC, `ubuntu-latest` g++) runs the same script on every pull request.
