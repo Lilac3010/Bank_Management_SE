@@ -17,6 +17,7 @@ Console C++ application (C++17). See the SRS, Test Plan and SAD PDFs for require
 | FR-13 storage (`storage.cpp`) | Implemented (see Data storage) |
 | FR-10 / FR-11 auth (`auth.h`) | Interface only: no `auth.cpp` yet, so `bank.exe` cannot link |
 | NFR-5 build on target OS (`build_and_test.ps1`, CI) | Implemented; `bank.exe` link waits for `auth.cpp` (see DEVIATIONS.md D-1) |
+| SEC-4 positive transaction amounts (`transactions.cpp`) | Implemented (already in FR-3 / FR-4); verified by `tests_sec4.cpp` |
 
 ## Build and run all test suites (NFR-5)
 `build_and_test.ps1` builds every active suite **separately** (each from its own file list
@@ -77,6 +78,9 @@ Each test suite uses its own test doubles:
 - **`tests_nfr5.cpp` (NFR-5)** links the **real** code of every `bank.exe` module except
   `main.cpp` and `auth.cpp`; only the three `auth.h` functions are fakes. It runs one pass
   through FR-1 to FR-9 with real storage inside a temporary folder it creates and deletes.
+- **`tests_sec4.cpp` (SEC-4)** uses the real `transactions.cpp`, with fakes for customer login
+  (`authenticateCustomer`) and storage. It calls `deposit()` / `withdraw()` directly and through
+  the console prompts. These tests do **not** verify FR-11, FR-13 or persistence across restart.
 - Build the active suites **separately**, each from its source-file list:
   - FR-1: `tests.cpp account.cpp`
   - FR-2: `tests_fr2.cpp account.cpp account_number.cpp`
@@ -87,6 +91,7 @@ Each test suite uses its own test doubles:
   - FR-8: `tests_fr8.cpp account_update.cpp`
   - FR-9: `tests_fr9.cpp account_closure.cpp`
   - FR-13: `tests_fr13.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp`
+  - SEC-4: `tests_sec4.cpp transactions.cpp`
   - NFR-5: `tests_nfr5.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
 
   Linking test files together fails, because each defines `main()` and the same fakes.
@@ -130,8 +135,20 @@ g++ equivalent: the same file lists with `g++ -std=c++17 -Wall -Wextra -o <name>
 
 g++ equivalent (g++ 8+ only): the same file list with `g++ -std=c++17 -Wall -Wextra -o tests_nfr5.exe`.
 
+## Build and run SEC-4 tests (customer login and storage are test doubles)
+    cl /std:c++17 /EHsc /W4 tests_sec4.cpp transactions.cpp /Fe:tests_sec4.exe
+    .\tests_sec4.exe
+
+g++ equivalent: `g++ -std=c++17 -Wall -Wextra -o tests_sec4.exe tests_sec4.cpp transactions.cpp`.
+
+Covers Test Plan TC-04 and §5.1 step 6 for both deposit and withdrawal: amounts 0, -1, -100,
+-50000 and `LLONG_MIN` paise passed to `deposit()` / `withdraw()`, and `0`, `0.00`, `0.0`, `00`,
+` 0 `, `-0`, `-0.00`, `-0.01`, `-1`, `-500` typed at the console. Each must be rejected with an
+error, leave the balance and stored record unchanged, save nothing and record no transaction.
+Four control checks confirm that the smallest positive amount (Rs. 0.01) is accepted.
+
 ## Verification status
-Latest run on 2026-11-01 with `build_and_test.ps1`, during NFR-5 work, on Windows 11 with
+Latest run on 2026-11-01 with `build_and_test.ps1`, during SEC-4 work, on Windows 11 with
 MSVC 2022 19.41 (`/std:c++17 /EHsc /W4`) and MinGW g++ 6.3.0 (`-Wall -Wextra`):
 
 | Suite | MSVC 2022 | g++ 6.3.0 |
@@ -145,6 +162,7 @@ MSVC 2022 19.41 (`/std:c++17 /EHsc /W4`) and MinGW g++ 6.3.0 (`-Wall -Wextra`):
 | FR-7 `tests_fr7.cpp` | 46 passed, 0 failed | 46 passed, 0 failed |
 | FR-8 `tests_fr8.cpp` | all 9 test cases passed | all 9 test cases passed |
 | FR-9 `tests_fr9.cpp` | all 5 test cases passed | all 5 test cases passed |
+| SEC-4 `tests_sec4.cpp` | 34 passed, 0 failed | 34 passed, 0 failed |
 | FR-13 `tests_fr13.cpp` | 58 passed, 0 failed (plus 12 checks inside the two restart processes, all passed) | Skipped: needs g++ 8+ |
 | NFR-5 `tests_nfr5.cpp` | 12 passed, 0 failed | Skipped: needs g++ 8+ |
 | `bank.exe` sources | All compile; link skipped (no `auth.cpp`) | Skipped: needs g++ 8+ |

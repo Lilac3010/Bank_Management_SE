@@ -47,3 +47,17 @@ we did, and what would close the gap.
   verifies it with TC-18 (together with NFR-4).
 - **What we do:** both are covered by the same evidence: the CI build on two compilers and the
   `tests_nfr5.cpp` link test. The module-structure part of TC-18 belongs to NFR-4.
+
+## D-5 SEC-4: the SRS maps SEC-4 to TC-06, which does not test non-positive withdrawals
+
+- **Documents:** the SRS traceability matrix verifies SEC-4 ("zero or negative
+  deposits/withdrawals are not accepted") with TC-04 and TC-06. TC-04 is "Deposit zero/negative
+  amount", but TC-06 is "Withdraw greater than balance" (withdraw Rs. 1500 from Rs. 1000), which
+  is an FR-4 insufficient-balance test. No numbered test case covers a zero or negative
+  **withdrawal**; only Test Plan §5.1 step 6 ("Attempt zero or negative transaction amounts")
+  does.
+- **What we do:** `tests_sec4.cpp` treats TC-04 and §5.1 step 6 as the SEC-4 tests and applies
+  them to **both** deposit and withdrawal: every zero or negative amount, given directly or typed
+  at the console, must be rejected with no change. TC-06 stays an FR-4 test (`tests_fr4.cpp`).
+- **To close:** in the next Test Plan revision, either add a "Withdraw zero/negative amount"
+  case for SEC-4 or extend TC-04 to cover withdrawals, and update the RTM row for SEC-4.
