@@ -1,3 +1,4 @@
+
 #include "account_closure.h"
 
 #include "auth.h"
@@ -44,6 +45,11 @@ bool parseAccountNumber(const std::string& text, int& accountNo) {
 } // namespace
 
 AccountClosureResult closeAccount(int accountNo) {
+    // SEC-1: Only authenticated employees can close accounts.
+    if (!isEmployeeAuthenticated()) {
+        return {false, "Access denied: employee login required."};
+    }
+
     if (accountNo <= 0) {
         return {false, "Error: Account number must be a positive whole number."};
     }
@@ -86,6 +92,7 @@ AccountClosureResult closeAccount(int accountNo) {
 }
 
 bool accountClosure() {
+    // SEC-1: Only authenticated employees can access account closure.
     if (!isEmployeeAuthenticated()) {
         std::cout << "Access denied: employee login required.\n";
         return false;
