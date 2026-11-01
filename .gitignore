@@ -4,5 +4,8 @@
 *.pdb
 *.ilk
 
+# Output of build_and_test.ps1 (NFR-5)
+build/
+
 # Runtime banking data written by the application (FR-13); never commit it
 data/
