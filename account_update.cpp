@@ -1,10 +1,11 @@
+
 #include "account_update.h"
 
-#include "account_search.h"
 #include "auth.h"
 #include "models.h"
 #include "storage.h"
 
+#include <algorithm>
 #include <cctype>
 #include <iostream>
 #include <string>
@@ -43,9 +44,11 @@ bool isValidContactNumber(const std::string& contactNumber) {
 }
 
 // Check whether another active account already uses this contact number.
-bool isContactNumberInUse(const std::vector<Account>& accounts,
-                          int accountNo,
-                          const std::string& contactNumber) {
+bool isContactNumberInUse(
+    const std::vector<Account>& accounts,
+    int accountNo,
+    const std::string& contactNumber
+) {
     for (const Account& account : accounts) {
         if (account.accountNumber != accountNo &&
             account.status == "ACTIVE" &&
@@ -59,24 +62,40 @@ bool isContactNumberInUse(const std::vector<Account>& accounts,
 
 } // namespace
 
-UpdateAccountResult updateAccountDetails(int accountNo,
-                                         const std::string& name,
-                                         const std::string& address,
-                                         const std::string& contactNumber) {
+UpdateAccountResult updateAccountDetails(
+    int accountNo,
+    const std::string& name,
+    const std::string& address,
+    const std::string& contactNumber
+) {
+    // SEC-1: Only authenticated employees can update account details.
+    if (!isEmployeeAuthenticated()) {
+        return {false, "Access denied: employee login required."};
+    }
+
     if (accountNo <= 0) {
         return {false, "Invalid account number."};
     }
 
-    if (!isValidName(name)) {
-        return {false, "Invalid name. Use letters, spaces, dots or apostrophes."};
+    if (name.empty() || address.empty() || contactNumber.empty()) {
+        return {
+            false,
+            "Name, address, and contact number cannot be empty."
+        };
     }
 
-    if (address.empty() || address.find('|') != std::string::npos) {
-        return {false, "Invalid address."};
+    if (!isValidName(name)) {
+        return {
+            false,
+            "Invalid name. Use letters, spaces, dots, or apostrophes only."
+        };
     }
 
     if (!isValidContactNumber(contactNumber)) {
-        return {false, "Contact number must contain exactly 10 digits."};
+        return {
+            false,
+            "Invalid contact number. It must contain exactly 10 digits."
+        };
     }
 
     std::vector<Account> accounts;
@@ -85,47 +104,48 @@ UpdateAccountResult updateAccountDetails(int accountNo,
         return {false, "Unable to load account records."};
     }
 
-    Account* targetAccount = nullptr;
-
-    for (Account& account : accounts) {
-        if (account.accountNumber == accountNo) {
-            targetAccount = &account;
-            break;
+    auto it = std::find_if(
+        accounts.begin(),
+        accounts.end(),
+        [accountNo](const Account& account) {
+            return account.accountNumber == accountNo &&
+                   account.status == "ACTIVE";
         }
-    }
+    );
 
-    if (targetAccount == nullptr) {
-        return {false, "Account not found."};
-    }
-
-    if (targetAccount->status != "ACTIVE") {
-        return {false, "Cannot update a closed account."};
+    if (it == accounts.end()) {
+        return {false, "Active account not found."};
     }
 
     if (isContactNumberInUse(accounts, accountNo, contactNumber)) {
-        return {false, "Contact number is already used by another active account."};
+        return {
+            false,
+            "Contact number already belongs to another active account."
+        };
     }
 
-    // Update only the permitted customer details.
-    // Account number, PIN, balance and status remain unchanged.
-    targetAccount->name = name;
-    targetAccount->address = address;
-    targetAccount->contactNumber = contactNumber;
+    // Update the customer details.
+    it->name = name;
+    it->address = address;
+    it->contactNumber = contactNumber;
 
-    if (!saveAccount(*targetAccount)) {
-        return {false, "Failed to save account updates."};
+    // Save the updated account using the existing FR-13 storage function.
+    if (!saveAccount(*it)) {
+        return {false, "Failed to save account details."};
     }
 
     return {true, "Account details updated successfully."};
 }
 
 bool accountUpdate() {
+    // SEC-1: Only authenticated employees can access account update.
     if (!isEmployeeAuthenticated()) {
         std::cout << "Access denied. Employee login required.\n";
         return false;
     }
 
     int accountNo;
+
     std::cout << "Enter account number to update: ";
 
     if (!(std::cin >> accountNo)) {
@@ -154,10 +174,13 @@ bool accountUpdate() {
             }
 
             found = true;
+
             std::cout << "\nCurrent customer details:\n";
             std::cout << "Name: " << account.name << '\n';
             std::cout << "Address: " << account.address << '\n';
-            std::cout << "Contact number: " << account.contactNumber << '\n';
+            std::cout << "Contact number: "
+                      << account.contactNumber << '\n';
+
             break;
         }
     }
@@ -184,5 +207,6 @@ bool accountUpdate() {
         updateAccountDetails(accountNo, name, address, contactNumber);
 
     std::cout << result.message << '\n';
+
     return result.success;
 }

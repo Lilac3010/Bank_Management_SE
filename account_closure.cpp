@@ -1,3 +1,4 @@
+
 #include "account_closure.h"
 
 #include "auth.h"
@@ -9,6 +10,11 @@
 #include <vector>
 
 AccountClosureResult closeAccount(int accountNo) {
+    // SEC-1: Only authenticated employees can close accounts.
+    if (!isEmployeeAuthenticated()) {
+        return {false, "Access denied: employee login required."};
+    }
+
     if (accountNo <= 0) {
         return {false, "Invalid account number."};
     }
@@ -51,6 +57,7 @@ AccountClosureResult closeAccount(int accountNo) {
 }
 
 bool accountClosure() {
+    // SEC-1: Only authenticated employees can access account closure.
     if (!isEmployeeAuthenticated()) {
         std::cout << "Access denied. Employee login required.\n";
         return false;
