@@ -1,8 +1,9 @@
 // NFR-5 whole-program link and smoke test, using the REAL code of every module bank.exe needs.
-// Build: g++ -std=c++17 -Wall -Wextra -o tests_nfr5.exe tests_nfr5.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp
-//    or: cl /std:c++17 /EHsc /W4 tests_nfr5.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp /Fe:tests_nfr5.exe
+// Build: g++ -std=c++17 -Wall -Wextra -o tests_nfr5.exe tests_nfr5.cpp menu.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp
+//    or: cl /std:c++17 /EHsc /W4 tests_nfr5.cpp menu.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp /Fe:tests_nfr5.exe
 //
-// This is the bank.exe file list without main.cpp (this file has its own main()) and without
+// This is the bank.exe file list without main.cpp (this file has its own main(); main.cpp only
+// calls runMainMenu() in menu.cpp) and without
 // auth.cpp (FR-10 / FR-11, not written yet). If this program links, bank.exe will link once
 // auth.cpp provides the three functions faked below.
 // Needs <filesystem> (storage.cpp): MSVC 2019+ or g++ 8+.
@@ -22,6 +23,7 @@
 #include "account_update.h"
 #include "auth.h"
 #include "balance_enquiry.h"
+#include "menu.h"
 #include "mini_statement.h"
 #include "storage.h"
 #include "transactions.h"
@@ -78,17 +80,19 @@ bool runConsole(bool (*flow)(), const std::string& input, std::string& output) {
     return ok;
 }
 
-// Every function main.cpp calls. Taking their addresses makes this program fail to link if
-// any module bank.exe needs (other than auth.cpp) is missing or defines one of them twice.
+// runMainMenu (called by main.cpp) and every function the menus call. Taking their addresses
+// makes this program fail to link if any module bank.exe needs (other than auth.cpp) is
+// missing or defines one of them twice.
 void testEveryMenuFunctionLinks() {
     using ConsoleFlow = bool (*)();
     const ConsoleFlow flows[] = {loginEmployee, createAccount, accountSearch, accountUpdate,
                                  accountClosure, depositMoney, withdrawMoney, balanceEnquiry,
                                  miniStatement};
-    bool allLinked = true;
+    void (*const mainMenu)() = runMainMenu;
+    bool allLinked = mainMenu != nullptr;
     for (ConsoleFlow flow : flows)
         if (flow == nullptr) allLinked = false;
-    check(allLinked, "NFR-5 all 9 functions called by main.cpp are linked");
+    check(allLinked, "NFR-5 runMainMenu and all 9 functions the menus call are linked");
 }
 
 // One pass through FR-1 to FR-9 with the real modules, then FR-13 checks what reached disk.

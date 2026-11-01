@@ -12,13 +12,15 @@ Console C++ application (C++17). See the SRS, Test Plan and SAD PDFs for require
 | FR-5 balance enquiry (`balance_enquiry.cpp`) | Implemented |
 | FR-6 mini-statement (`mini_statement.cpp`) | Implemented |
 | FR-7 employee account search (`account_search.cpp`) | Implemented; Employee Menu option 2 |
-| FR-8 update account details (`account_update.cpp`) | Implemented; Employee Menu option 3 |
-| FR-9 close account (`account_closure.cpp`) | Implemented; Employee Menu option 4 |
+| FR-8 update account details (`account_update.cpp`) | Implemented; Employee Menu option 3. Input checks tightened in NFR-3 (DEVIATIONS.md D-7) |
+| FR-9 close account (`account_closure.cpp`) | Implemented; Employee Menu option 4. Input checks tightened in NFR-3 (DEVIATIONS.md D-7) |
+| Console menus (`menu.cpp`, `main.cpp`) | Main menu and Employee Menu in `runMainMenu()`; `main()` only calls it |
 | FR-13 storage (`storage.cpp`) | Implemented (see Data storage) |
 | FR-10 / FR-11 auth (`auth.h`) | Interface only: no `auth.cpp` yet, so `bank.exe` cannot link |
 | NFR-5 build on target OS (`build_and_test.ps1`, CI) | Implemented; `bank.exe` link waits for `auth.cpp` (see DEVIATIONS.md D-1) |
 | SEC-4 positive transaction amounts (`transactions.cpp`) | Implemented (already in FR-3 / FR-4); verified by `tests_sec4.cpp` |
 | NFR-1 2-second response time | Met; verified by `tests_nfr1.cpp` (see Performance results and DEVIATIONS.md D-6) |
+| NFR-3 invalid input changes nothing | Met after FR-8 / FR-9 fixes; verified by `tests_nfr3.cpp` (see DEVIATIONS.md D-7) |
 
 ## Build and run all test suites (NFR-5)
 `build_and_test.ps1` builds every active suite **separately** (each from its own file list
@@ -86,6 +88,10 @@ Each test suite uses its own test doubles:
   `balance_enquiry.cpp`; only customer login (`authenticateCustomer`) is a fake, and it reads
   accounts through the real storage. It works only inside a temporary folder it creates and
   deletes.
+- **`tests_nfr3.cpp` (NFR-3)** types invalid input into the **real** menus (`menu.cpp`) and
+  console flows with the **real** `storage.cpp`; only login (`loginEmployee`,
+  `isEmployeeAuthenticated`, `authenticateCustomer`) is faked. It works only inside a temporary
+  folder it creates and deletes.
 - Build the active suites **separately**, each from its source-file list:
   - FR-1: `tests.cpp account.cpp`
   - FR-2: `tests_fr2.cpp account.cpp account_number.cpp`
@@ -98,7 +104,8 @@ Each test suite uses its own test doubles:
   - FR-13: `tests_fr13.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp`
   - SEC-4: `tests_sec4.cpp transactions.cpp`
   - NFR-1: `tests_nfr1.cpp storage.cpp transactions.cpp balance_enquiry.cpp`
-  - NFR-5: `tests_nfr5.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
+  - NFR-3: `tests_nfr3.cpp menu.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
+  - NFR-5: `tests_nfr5.cpp menu.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
 
   Linking test files together fails, because each defines `main()` and the same fakes.
 - Never build every `.cpp` file together (for example an IDE "build all" or a `*.cpp` glob):
@@ -136,7 +143,7 @@ processes to check that saved data survives a restart.
 g++ equivalent: the same file lists with `g++ -std=c++17 -Wall -Wextra -o <name>.exe`.
 
 ## Build and run NFR-5 link and smoke tests (real modules; login is a test double)
-    cl /std:c++17 /EHsc /W4 tests_nfr5.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp /Fe:tests_nfr5.exe
+    cl /std:c++17 /EHsc /W4 tests_nfr5.cpp menu.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp /Fe:tests_nfr5.exe
     .\tests_nfr5.exe
 
 g++ equivalent (g++ 8+ only): the same file list with `g++ -std=c++17 -Wall -Wextra -o tests_nfr5.exe`.
@@ -152,6 +159,27 @@ Covers Test Plan TC-04 and §5.1 step 6 for both deposit and withdrawal: amounts
 ` 0 `, `-0`, `-0.00`, `-0.01`, `-1`, `-500` typed at the console. Each must be rejected with an
 error, leave the balance and stored record unchanged, save nothing and record no transaction.
 Four control checks confirm that the smallest positive amount (Rs. 0.01) is accepted.
+
+## Build and run NFR-3 invalid-input tests (real menus and storage; login is a test double)
+    cl /std:c++17 /EHsc /W4 tests_nfr3.cpp menu.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp /Fe:tests_nfr3.exe
+    .\tests_nfr3.exe
+
+g++ equivalent (g++ 8+ only): the same file list with `g++ -std=c++17 -Wall -Wextra -o tests_nfr3.exe`.
+
+Covers Test Plan TC-14. Every case types input into `runMainMenu()`, the same menu `bank.exe`
+uses: non-numeric and out-of-range menu choices, letters in amounts and account numbers,
+empty lines and end of input, for the main menu, the Employee Menu, create, search, update,
+close, deposit, withdrawal, balance enquiry and mini-statement. Each case starts from the same
+saved data (2 accounts, 1 transaction) and checks that:
+- the expected error message is shown and no success message is;
+- `data/accounts.txt` and `data/transactions.txt` are byte-for-byte unchanged;
+- no save happened: each file's timestamp is set to a day ago before the case and must not
+  change (every save rewrites the whole file), and no `.tmp` file is left;
+- the menu returns within 5 seconds; otherwise the suite reports an endless loop and stops.
+
+At end of input (no keyboard left) a flow may return without a message; the other checks still
+apply. Three self-checks at the start confirm that the data check notices a save even when it
+writes identical bytes.
 
 ## Build and run NFR-1 response-time tests (real storage; login is a test double)
     cl /std:c++17 /EHsc /W4 tests_nfr1.cpp storage.cpp transactions.cpp balance_enquiry.cpp /Fe:tests_nfr1.exe
@@ -191,7 +219,7 @@ Data: 500 accounts (`accounts.txt` 36799 bytes), 10000 transactions (`transactio
   are printed in the job log and vary with runner load.
 
 ## Verification status
-Latest run on 2026-11-01 with `build_and_test.ps1`, during NFR-1 work, on Windows 11 with
+Latest run on 2026-11-01 with `build_and_test.ps1`, during NFR-3 work, on Windows 11 with
 MSVC 2022 19.41 (`/std:c++17 /EHsc /W4`) and MinGW g++ 6.3.0 (`-Wall -Wextra`):
 
 | Suite | MSVC 2022 | g++ 6.3.0 |
@@ -208,6 +236,7 @@ MSVC 2022 19.41 (`/std:c++17 /EHsc /W4`) and MinGW g++ 6.3.0 (`-Wall -Wextra`):
 | SEC-4 `tests_sec4.cpp` | 34 passed, 0 failed | 34 passed, 0 failed |
 | FR-13 `tests_fr13.cpp` | 58 passed, 0 failed (plus 12 checks inside the two restart processes, all passed) | Skipped: needs g++ 8+ |
 | NFR-1 `tests_nfr1.cpp` | 9 passed, 0 failed (timings in Performance results) | Skipped: needs g++ 8+ |
+| NFR-3 `tests_nfr3.cpp` | 95 passed, 0 failed | Skipped: needs g++ 8+ |
 | NFR-5 `tests_nfr5.cpp` | 12 passed, 0 failed | Skipped: needs g++ 8+ |
 | `bank.exe` sources | All compile; link skipped (no `auth.cpp`) | Skipped: needs g++ 8+ |
 
@@ -224,7 +253,7 @@ CI (`windows-latest` MSVC, `ubuntu-latest` g++) runs the same script on every pu
   means "not run", not "failed".
 
 ## Build the application
-    cl /std:c++17 /EHsc /W4 main.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp storage.cpp account_search.cpp account_update.cpp account_closure.cpp auth.cpp /Fe:bank.exe
+    cl /std:c++17 /EHsc /W4 main.cpp menu.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp storage.cpp account_search.cpp account_update.cpp account_closure.cpp auth.cpp /Fe:bank.exe
     .\bank.exe
 
 g++ equivalent (g++ 8+ only): the same file list with `g++ -std=c++17 -Wall -Wextra -o bank.exe`.

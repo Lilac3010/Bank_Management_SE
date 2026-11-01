@@ -6,25 +6,61 @@
 #include "storage.h"
 
 #include <cctype>
+#include <climits>
 #include <iostream>
 #include <string>
 #include <vector>
 
 namespace {
 
-// Validate customer name: letters, spaces, dots and apostrophes.
-bool isValidName(const std::string& name) {
-    if (name.empty()) {
+// Remove leading and trailing spaces, as FR-1 does before validating (trim in account.cpp).
+std::string trim(const std::string& text) {
+    const size_t start = text.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) {
+        return "";
+    }
+
+    const size_t end = text.find_last_not_of(" \t\r\n");
+    return text.substr(start, end - start + 1);
+}
+
+// Accept a whole line of digits only (surrounding spaces are ignored) for a positive
+// number that fits in an int. Same rules as parseAccountNumber in account_search.cpp (FR-7).
+bool parseAccountNumber(const std::string& text, int& accountNo) {
+    const std::string digits = trim(text);
+    if (digits.empty() || digits.size() > 10) {
         return false;
     }
 
-    for (unsigned char ch : name) {
-        if (!std::isalpha(ch) && ch != ' ' && ch != '.' && ch != '\'') {
+    for (unsigned char ch : digits) {
+        if (!std::isdigit(ch)) {
             return false;
         }
     }
 
+    const long long value = std::stoll(digits);
+    if (value <= 0 || value > INT_MAX) {
+        return false;
+    }
+
+    accountNo = static_cast<int>(value);
     return true;
+}
+
+// Validate customer name: letters, spaces, dots and apostrophes, with at least one
+// letter. Same rule as isValidName in account.cpp (FR-1).
+bool isValidName(const std::string& name) {
+    bool hasLetter = false;
+
+    for (unsigned char ch : name) {
+        if (std::isalpha(ch)) {
+            hasLetter = true;
+        } else if (ch != ' ' && ch != '.' && ch != '\'') {
+            return false;
+        }
+    }
+
+    return hasLetter;
 }
 
 // Validate contact number: exactly 10 digits.
@@ -67,15 +103,21 @@ UpdateAccountResult updateAccountDetails(int accountNo,
         return {false, "Invalid account number."};
     }
 
-    if (!isValidName(name)) {
+    // Same rules as FR-1 account creation: surrounding spaces are ignored, so a value
+    // made only of spaces counts as empty.
+    const std::string newName = trim(name);
+    const std::string newAddress = trim(address);
+    const std::string newContactNumber = trim(contactNumber);
+
+    if (!isValidName(newName)) {
         return {false, "Invalid name. Use letters, spaces, dots or apostrophes."};
     }
 
-    if (address.empty() || address.find('|') != std::string::npos) {
+    if (newAddress.empty() || newAddress.find('|') != std::string::npos) {
         return {false, "Invalid address."};
     }
 
-    if (!isValidContactNumber(contactNumber)) {
+    if (!isValidContactNumber(newContactNumber)) {
         return {false, "Contact number must contain exactly 10 digits."};
     }
 
@@ -102,15 +144,15 @@ UpdateAccountResult updateAccountDetails(int accountNo,
         return {false, "Cannot update a closed account."};
     }
 
-    if (isContactNumberInUse(accounts, accountNo, contactNumber)) {
+    if (isContactNumberInUse(accounts, accountNo, newContactNumber)) {
         return {false, "Contact number is already used by another active account."};
     }
 
     // Update only the permitted customer details.
     // Account number, PIN, balance and status remain unchanged.
-    targetAccount->name = name;
-    targetAccount->address = address;
-    targetAccount->contactNumber = contactNumber;
+    targetAccount->name = newName;
+    targetAccount->address = newAddress;
+    targetAccount->contactNumber = newContactNumber;
 
     if (!saveAccount(*targetAccount)) {
         return {false, "Failed to save account updates."};
@@ -125,17 +167,16 @@ bool accountUpdate() {
         return false;
     }
 
-    int accountNo;
+    std::string accountText;
+    int accountNo = 0;
     std::cout << "Enter account number to update: ";
 
-    if (!(std::cin >> accountNo)) {
-        std::cin.clear();
-        std::cin.ignore(10000, '\n');
+    // Read the whole line so input such as "100001abc" is rejected, not read as 100001.
+    if (!std::getline(std::cin, accountText) ||
+        !parseAccountNumber(accountText, accountNo)) {
         std::cout << "Invalid account number.\n";
         return false;
     }
-
-    std::cin.ignore(10000, '\n');
 
     std::vector<Account> accounts;
 

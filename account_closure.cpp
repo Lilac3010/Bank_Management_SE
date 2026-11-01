@@ -4,9 +4,44 @@
 #include "models.h"
 #include "storage.h"
 
+#include <cctype>
+#include <climits>
 #include <iostream>
-#include <limits>
+#include <string>
 #include <vector>
+
+namespace {
+
+// Accept a whole line of digits only (surrounding spaces are ignored) for a positive
+// number that fits in an int. Same rules as parseAccountNumber in account_search.cpp (FR-7).
+bool parseAccountNumber(const std::string& text, int& accountNo) {
+    const size_t start = text.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) {
+        return false;
+    }
+
+    const size_t end = text.find_last_not_of(" \t\r\n");
+    const std::string digits = text.substr(start, end - start + 1);
+    if (digits.size() > 10) {
+        return false;
+    }
+
+    for (unsigned char ch : digits) {
+        if (!std::isdigit(ch)) {
+            return false;
+        }
+    }
+
+    const long long value = std::stoll(digits);
+    if (value <= 0 || value > INT_MAX) {
+        return false;
+    }
+
+    accountNo = static_cast<int>(value);
+    return true;
+}
+
+} // namespace
 
 AccountClosureResult closeAccount(int accountNo) {
     if (accountNo <= 0) {
@@ -56,18 +91,17 @@ bool accountClosure() {
         return false;
     }
 
-    int accountNo;
+    std::string accountText;
+    int accountNo = 0;
 
     std::cout << "Enter account number to close: ";
 
-    if (!(std::cin >> accountNo)) {
-        std::cin.clear();
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    // Read the whole line so input such as "100001abc" is rejected, not read as 100001.
+    if (!std::getline(std::cin, accountText) ||
+        !parseAccountNumber(accountText, accountNo)) {
         std::cout << "Invalid account number.\n";
         return false;
     }
-
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
     AccountClosureResult result = closeAccount(accountNo);
 
