@@ -291,3 +291,31 @@ we did, and what would close the gap.
   functions and the `password_hash` module.
 - **To close:** in the next SRS / SAD revision, record where employee credentials live, the
   setup command, the username and password rules, and the hashing choice (SAD §3, §4.1, §4.2).
+
+## D-13 FR-11: customer authentication is per operation
+
+- **Documents:** SRS FR-11: "The system shall authenticate a customer using an account number and
+  PIN before self-service transactions." SRS SEC-2, SEC-3; Test Plan TC-13; SAD §3 ("Account
+  number + PIN is checked before self-service operations"), §4.2 (`authenticateCustomer(accountNo,
+  pin)`). None of them asks for a customer session or a customer logout.
+- **What we do:** `authenticateCustomer()` (added with `auth.cpp` in PR #41) is called by each of the
+  four self-service screens before any data is shown or an amount is asked for. It accepts only a
+  stored ACTIVE account with exactly that PIN, reading the accounts from storage every time. There
+  is no customer session, so nothing can be left logged in and no logout is needed; employee and
+  customer logins are independent. FR-11 kept this design and changed only one thing: the function
+  no longer prints `Invalid account number or PIN.`, so a denial shows a single line (`Access denied:
+  invalid account number or PIN.`, from the screen) instead of two (closes the NFR-2 usability
+  point in the README).
+- **Verified by:** `tests_fr11.cpp` (new; real code, no test doubles) and `tests_sec2.cpp`.
+- **Limits that remain** (not changed, because FR-11 does not need it and the owners' code and
+  tests would change):
+  - PINs are stored and compared in plain text (README Data storage; contrast with employee
+    passwords, D-12).
+  - `authenticateCustomer()` returns only true / false, so an unreadable accounts file is shown to
+    the customer as "invalid account number or PIN", not as a storage error. Telling them apart
+    needs a different return type, which every login fake and `tests_nfr4.cpp` would follow.
+  - `deposit()` and `withdraw()` (FR-3 / FR-4) do not check login themselves; their callers must
+    authenticate first. All current callers (`depositMoney()`, `withdrawMoney()`) do. Enforcing it
+    inside them would need a customer session and would change the FR-3 / FR-4, FR-13, NFR-1,
+    NFR-5 and SEC-4 suites that call them directly.
+  - No attempt limit for PINs, as for employees (D-10).
