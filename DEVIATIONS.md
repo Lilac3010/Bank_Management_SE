@@ -319,3 +319,27 @@ we did, and what would close the gap.
     inside them would need a customer session and would change the FR-3 / FR-4, FR-13, NFR-1,
     NFR-5 and SEC-4 suites that call them directly.
   - No attempt limit for PINs, as for employees (D-10).
+
+## D-14 FR-12: met by existing checks; remaining message gaps
+
+- **Documents:** SRS FR-12: "The system shall display an appropriate error message when an
+  operation fails because of invalid input, invalid credentials, insufficient balance, duplicate
+  account data, or a non-existent account." Test Plan TC-02, TC-04, TC-06, TC-14 (RTM).
+- **What we found:** every category was already rejected with a message and without changing any
+  file, by FR-1, FR-3 / FR-4, FR-7 to FR-11 and the NFR-3 fixes (D-7). FR-12 therefore added no
+  production code, only `tests_fr12.cpp`, which checks each category through the real program (no
+  test doubles) and checks that the data files are neither changed nor rewritten.
+- **Gaps left as they are** (understandable and safe, but changing them would alter other owners'
+  messages or interfaces, which FR-12 does not require):
+  - Deposit and withdrawal ask for the PIN before they check the account-number format, so a
+    malformed number such as `abc` gets `Access denied: invalid account number or PIN.`, while
+    balance enquiry, mini-statement and the employee screens say `Error: Account number must be a
+    positive whole number.` (FR-3 / FR-4 owners).
+  - At the customer screens a non-existent account gets the same `Access denied` message as a wrong
+    PIN, on purpose (FR-11, D-13): it does not reveal which account numbers exist. The employee
+    screens and `deposit()` / `withdraw()` say `Error: Account not found.`.
+  - An unreadable accounts file is reported to customers as invalid credentials (D-13).
+  - FR-8 says `Cannot update a closed account.` for any non-ACTIVE status, not only CLOSED.
+  - "Duplicate account data" means an ACTIVE account with the same contact number (README FR-1
+    assumptions); the same name or address alone is not a duplicate, and a CLOSED account's
+    contact number may be reused.
