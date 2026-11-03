@@ -16,6 +16,7 @@ Console C++ application (C++17). See the SRS, Test Plan and SAD PDFs for require
 | FR-9 close account (`account_closure.cpp`) | Implemented; Employee Menu option 4. Input checks tightened in NFR-3 (DEVIATIONS.md D-7); wording aligned in NFR-2 (D-9) |
 | Console menus (`menu.cpp`, `main.cpp`) | Main menu and Employee Menu in `runMainMenu()`; `main()` only calls it (DEVIATIONS.md D-8) |
 | FR-13 storage (`storage.cpp`) | Implemented (see Data storage) |
+| NFR-6 data persistence across restart | Met by FR-13 storage (every save is written to disk at once; every read loads from disk; no change needed); verified by `tests_nfr6.cpp`, which runs the real application in 8 separate processes (Test Plan TC-15; DEVIATIONS.md D-15) |
 | FR-12 error messages for invalid operations | Met by the existing checks in FR-1, FR-3 / FR-4, FR-7 to FR-11 (no code change needed); verified by `tests_fr12.cpp` for all five SRS categories (see FR-12 error handling) |
 | FR-10 / FR-11 auth (`auth.cpp`) | Implemented (SEC-1, PR #41) |
 | FR-11 customer authentication (`auth.cpp`) | Implemented: account number + PIN checked by `authenticateCustomer()` before every self-service operation (no customer session). Verified by `tests_fr11.cpp` and `tests_sec2.cpp` (see Customer authentication) |
@@ -42,7 +43,7 @@ if nothing failed.
 - Programs and object files go to `build/<compiler>/`, which git ignores.
 - **Compiler versions:** C++17 with `<filesystem>` is needed for `storage.cpp`, so use
   **MSVC 2019+ or g++ 8+**. With an older g++ (for example MinGW g++ 6.3.0) the suites that use
-  `storage.cpp` (FR-13, NFR-1, NFR-3, NFR-5, SEC-2, SEC-3, FR-10, FR-11, FR-12) and the `bank.exe` build are **skipped** with
+  `storage.cpp` (FR-13, NFR-1, NFR-3, NFR-5, NFR-6, SEC-2, SEC-3, FR-10, FR-11, FR-12) and the `bank.exe` build are **skipped** with
   a message; the other suites still build and run.
 - **Crypto library (FR-10):** `password_hash.cpp` uses the operating system's PBKDF2. On Windows
   that is CNG (`bcrypt.lib`, part of the Windows SDK that MSVC already uses; the source asks the
@@ -117,6 +118,9 @@ Each test suite uses its own test doubles:
   itself in place of `main.cpp`, so it must **never** be linked with a file that fakes login,
   storage or a feature. It works only inside a temporary folder it creates and deletes, and
   creates its test employee there with `createFirstEmployee()`.
+- **`tests_nfr6.cpp` (NFR-6)** has **no test doubles** (same file list as FR-10). It starts itself
+  again as separate processes, each running `runApplication()` (what `bank.exe`'s `main()` calls)
+  with typed input from a file; the child processes refuse to run outside its temporary folder.
 - **`tests_fr12.cpp` (FR-12)** has **no test doubles** either (same file list as FR-10); it works
   only inside a temporary folder it creates and deletes.
 - **`tests_fr11.cpp` (FR-11)** has **no test doubles**: the same file list as FR-10, with the real
@@ -148,6 +152,7 @@ Each test suite uses its own test doubles:
   - FR-10: `tests_fr10.cpp menu.cpp auth.cpp password_hash.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
   - FR-11: `tests_fr11.cpp` with the same other files as FR-10
   - FR-12: `tests_fr12.cpp` with the same other files as FR-10
+  - NFR-6: `tests_nfr6.cpp` with the same other files as FR-10
 
   On Linux add `-lcrypto` to every g++ list that contains `password_hash.cpp`.
   - NFR-4: `tests_nfr4.cpp` (nothing else)
@@ -423,7 +428,7 @@ Data: 500 accounts (`accounts.txt` 36799 bytes), 10000 transactions (`transactio
   are printed in the job log and vary with runner load.
 
 ## Verification status
-Latest run on 2026-11-03 with `build_and_test.ps1`, during FR-12 work, on Windows 11 with
+Latest run on 2026-11-03 with `build_and_test.ps1`, during NFR-6 work, on Windows 11 with
 MSVC 2022 19.41 (`/std:c++17 /EHsc /W4`) and MinGW g++ 6.3.0 (`-Wall -Wextra`). Linux (g++ with
 OpenSSL) is checked only by CI; see the note under the table.
 
@@ -449,6 +454,7 @@ OpenSSL) is checked only by CI; see the note under the table.
 | FR-10 `tests_fr10.cpp` | 146 passed, 0 failed (Windows CNG; about 50 s) | Skipped: needs g++ 8+ |
 | FR-11 `tests_fr11.cpp` | 102 passed, 0 failed | Skipped: needs g++ 8+ |
 | FR-12 `tests_fr12.cpp` | 76 passed, 0 failed | Skipped: needs g++ 8+ |
+| NFR-6 `tests_nfr6.cpp` | 21 passed, 0 failed (8 separate application processes) | Skipped: needs g++ 8+ |
 | NFR-4 `tests_nfr4.cpp` | 39 passed, 0 failed | 39 passed, 0 failed |
 | NFR-4 header check | all 12 headers compile alone | all 12 headers compile alone |
 | `bank.exe` | Linked (not run: interactive; a scripted run is described under Employee logins) | Skipped: needs g++ 8+ |

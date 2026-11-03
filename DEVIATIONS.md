@@ -343,3 +343,25 @@ we did, and what would close the gap.
   - "Duplicate account data" means an ACTIVE account with the same contact number (README FR-1
     assumptions); the same name or address alone is not a duplicate, and a CLOSED account's
     contact number may be reused.
+
+## D-15 NFR-6: TC-15 is automated with separate processes
+
+- **Documents:** SRS NFR-6: "A successful account or transaction update shall remain available
+  after closing and restarting the program." Test Plan TC-15: "Create/update account; close
+  program; restart"; §3.3: "Persistence will be verified by restarting the application."
+- **What we found:** FR-13 storage already meets NFR-6: every successful save writes the whole
+  file to disk before it returns, every load reads from disk, and nothing is cached or written at
+  exit, so closing the program cannot lose a successful update. No production code was changed.
+- **What we do:** instead of a person restarting `bank.exe`, `tests_nfr6.cpp` starts the real
+  application (`runApplication()`, the function `bank.exe`'s `main()` calls, with the real login,
+  features and storage) as 8 separate processes, typing input into each. Each process exits before
+  the next starts, so later sessions can only see what is on disk. It covers TC-15 (create, update,
+  deposit, withdrawal, transaction history, CLOSED status, employee record) and checks that a
+  process with only failed operations leaves every file unchanged. `tests_fr13.cpp` keeps its own
+  two-process check at the storage level. This changes the tool, not the requirement (as D-6).
+- **Limits:** "restart" here is a clean exit and a new process. A crash or power loss during a
+  save is not tested; the safe-write design (temp file, then replace) keeps the old file in that
+  case (README Data storage). A deposit or withdrawal saves two files, so an interruption between
+  them is the consistency limit already described there.
+- **To close (optional):** one manual TC-15 run of `bank.exe` (create, close, restart, check),
+  recorded in the README.
