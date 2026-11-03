@@ -7,6 +7,12 @@
 // loginEmployee: console flow; asks for a username and password (the password is not echoed
 //   at a real console) and checks them against data/employees.txt. Any failure logs out.
 bool loginEmployee();
+
+// FR-11 - true only if a stored ACTIVE account has exactly this number (> 0) and this PIN.
+//   Reads the accounts through storage every time; an unreadable accounts file gives false.
+//   Prints nothing and saves nothing. There is no customer session: each self-service flow
+//   (deposit, withdrawal, balance enquiry, mini-statement) asks for the account number and PIN
+//   and calls this before it shows any data or asks for an amount.
 bool authenticateCustomer(int accountNo, const std::string& pin);
 
 // Integration point used by the employee features (FR-1, FR-7, FR-8, FR-9).

@@ -207,11 +207,12 @@ bool loginEmployee() {
     return false;
 }
 
+// FR-11: prints nothing. Every self-service screen shows its own single
+// "Access denied: invalid account number or PIN." when this returns false.
 bool authenticateCustomer(int accountNo, const std::string& pin) {
     std::vector<Account> accounts;
 
     if (accountNo <= 0 || pin.empty() || !loadAccounts(accounts)) {
-        std::cout << "Invalid account number or PIN.\n";
         return false;
     }
 
@@ -223,7 +224,6 @@ bool authenticateCustomer(int accountNo, const std::string& pin) {
         }
     }
 
-    std::cout << "Invalid account number or PIN.\n";
     return false;
 }
 
