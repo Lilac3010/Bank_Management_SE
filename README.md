@@ -16,6 +16,7 @@ Console C++ application (C++17). See the SRS, Test Plan and SAD PDFs for require
 | FR-9 close account (`account_closure.cpp`) | Implemented; Employee Menu option 4. Input checks tightened in NFR-3 (DEVIATIONS.md D-7); wording aligned in NFR-2 (D-9) |
 | Console menus (`menu.cpp`, `main.cpp`) | Main menu and Employee Menu in `runMainMenu()`; `main()` only calls it (DEVIATIONS.md D-8) |
 | FR-13 storage (`storage.cpp`) | Implemented (see Data storage) |
+| FR-12 error messages for invalid operations | Met by the existing checks in FR-1, FR-3 / FR-4, FR-7 to FR-11 (no code change needed); verified by `tests_fr12.cpp` for all five SRS categories (see FR-12 error handling) |
 | FR-10 / FR-11 auth (`auth.cpp`) | Implemented (SEC-1, PR #41) |
 | FR-11 customer authentication (`auth.cpp`) | Implemented: account number + PIN checked by `authenticateCustomer()` before every self-service operation (no customer session). Verified by `tests_fr11.cpp` and `tests_sec2.cpp` (see Customer authentication) |
 | FR-10 employee login (`auth.cpp`, `password_hash.cpp`) | Implemented: employees in `data/employees.txt` with PBKDF2-HMAC-SHA256 hashes (no built-in credentials), first employee and later ones added with `bank.exe --add-employee`, logout on leaving the Employee Menu. Verified by `tests_fr10.cpp` and `tests_sec3.cpp` (see Employee logins and DEVIATIONS.md D-12) |
@@ -41,7 +42,7 @@ if nothing failed.
 - Programs and object files go to `build/<compiler>/`, which git ignores.
 - **Compiler versions:** C++17 with `<filesystem>` is needed for `storage.cpp`, so use
   **MSVC 2019+ or g++ 8+**. With an older g++ (for example MinGW g++ 6.3.0) the suites that use
-  `storage.cpp` (FR-13, NFR-1, NFR-3, NFR-5, SEC-2, SEC-3, FR-10, FR-11) and the `bank.exe` build are **skipped** with
+  `storage.cpp` (FR-13, NFR-1, NFR-3, NFR-5, SEC-2, SEC-3, FR-10, FR-11, FR-12) and the `bank.exe` build are **skipped** with
   a message; the other suites still build and run.
 - **Crypto library (FR-10):** `password_hash.cpp` uses the operating system's PBKDF2. On Windows
   that is CNG (`bcrypt.lib`, part of the Windows SDK that MSVC already uses; the source asks the
@@ -116,6 +117,8 @@ Each test suite uses its own test doubles:
   itself in place of `main.cpp`, so it must **never** be linked with a file that fakes login,
   storage or a feature. It works only inside a temporary folder it creates and deletes, and
   creates its test employee there with `createFirstEmployee()`.
+- **`tests_fr12.cpp` (FR-12)** has **no test doubles** either (same file list as FR-10); it works
+  only inside a temporary folder it creates and deletes.
 - **`tests_fr11.cpp` (FR-11)** has **no test doubles**: the same file list as FR-10, with the real
   `auth.cpp`, `storage.cpp`, menus and the four self-service flows. It works only inside a
   temporary folder it creates and deletes.
@@ -144,6 +147,7 @@ Each test suite uses its own test doubles:
   - SEC-3: `tests_sec3.cpp menu.cpp auth.cpp password_hash.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
   - FR-10: `tests_fr10.cpp menu.cpp auth.cpp password_hash.cpp storage.cpp account.cpp account_number.cpp transactions.cpp balance_enquiry.cpp mini_statement.cpp account_search.cpp account_update.cpp account_closure.cpp`
   - FR-11: `tests_fr11.cpp` with the same other files as FR-10
+  - FR-12: `tests_fr12.cpp` with the same other files as FR-10
 
   On Linux add `-lcrypto` to every g++ list that contains `password_hash.cpp`.
   - NFR-4: `tests_nfr4.cpp` (nothing else)
@@ -419,7 +423,7 @@ Data: 500 accounts (`accounts.txt` 36799 bytes), 10000 transactions (`transactio
   are printed in the job log and vary with runner load.
 
 ## Verification status
-Latest run on 2026-11-03 with `build_and_test.ps1`, during FR-11 work, on Windows 11 with
+Latest run on 2026-11-03 with `build_and_test.ps1`, during FR-12 work, on Windows 11 with
 MSVC 2022 19.41 (`/std:c++17 /EHsc /W4`) and MinGW g++ 6.3.0 (`-Wall -Wextra`). Linux (g++ with
 OpenSSL) is checked only by CI; see the note under the table.
 
@@ -444,6 +448,7 @@ OpenSSL) is checked only by CI; see the note under the table.
 | SEC-3 `tests_sec3.cpp` | 36 passed, 0 failed | Skipped: needs g++ 8+ |
 | FR-10 `tests_fr10.cpp` | 146 passed, 0 failed (Windows CNG; about 50 s) | Skipped: needs g++ 8+ |
 | FR-11 `tests_fr11.cpp` | 102 passed, 0 failed | Skipped: needs g++ 8+ |
+| FR-12 `tests_fr12.cpp` | 76 passed, 0 failed | Skipped: needs g++ 8+ |
 | NFR-4 `tests_nfr4.cpp` | 39 passed, 0 failed | 39 passed, 0 failed |
 | NFR-4 header check | all 12 headers compile alone | all 12 headers compile alone |
 | `bank.exe` | Linked (not run: interactive; a scripted run is described under Employee logins) | Skipped: needs g++ 8+ |
@@ -519,6 +524,24 @@ employee added; second setup refused with a wrong existing password; second empl
 the correct one; duplicate username refused; unknown argument printed the usage (exit 2); login,
 account search, `0` printed `Employee logged out.`; a wrong password was refused. The employees
 file held only the two hash records.
+
+## FR-12 error handling
+SRS FR-12 asks for an appropriate error message when an operation fails because of invalid
+input, invalid credentials, insufficient balance, duplicate account data or a non-existent
+account. The existing features already did this; `tests_fr12.cpp` checks each category once
+through the real program, and that nothing changes on disk (files byte-for-byte equal and not
+rewritten):
+
+| Category | Where it is checked | Message (examples) |
+|---|---|---|
+| Invalid input | FR-1 fields and opening deposit; deposit / withdrawal amounts; account numbers on every screen; menu choices | `Error: PIN must be exactly 4 digits.`, `Error: Deposit amount must be an amount like 1000 or 1000.50.`, `Error: Account number must be a positive whole number.`, `Invalid choice. Please try again.` |
+| Invalid credentials | FR-10 employee login, FR-11 customer screens | `Invalid username or password.`, `Access denied: invalid account number or PIN.` |
+| Insufficient balance | FR-4 `withdraw()` | `Error: Insufficient balance. Withdrawal not made.` |
+| Duplicate account data | FR-1 create, FR-8 update (contact number of another ACTIVE account) | `Error: An active account with this contact number already exists.` |
+| Non-existent account | FR-7 search, FR-8 update, FR-9 close, `deposit()` / `withdraw()` | `Error: Account not found.`; at the customer screens `Access denied: ...`, so the message does not reveal which account numbers exist |
+
+Deeper cases for each category are in `tests_nfr3.cpp`, `tests_sec2.cpp` to `tests_sec4.cpp`,
+`tests_fr10.cpp` and `tests_fr11.cpp`. Known gaps are listed in DEVIATIONS.md D-14.
 
 ## Customer authentication (FR-11)
 - **Per operation, no session:** deposit, withdrawal, balance enquiry and mini-statement each ask
